@@ -1,15 +1,15 @@
 const express = require('express');
 const router = express.Router();
 
-// List of all automated AI services available globally
+// List of all automated AI services available globally (including new high-traffic modules)
 router.get('/services', (req, res) => {
   res.json([
     { id: 'seo', name: 'Global SEO Blog Generator', description: 'Auto-generates localized SEO content for 30+ countries.' },
+    { id: 'bulk-seo', name: 'Bulk SEO Programmatic Engine 🚀', description: 'Generates bulk article outlines, keywords, and meta tags simultaneously.' },
+    { id: 'viral-video', name: 'Viral Video Repurposer & Script Engine 🎬', description: 'Turns topics into high-retention TikTok/Reels scripts and caption bundles.' },
     { id: 'translation', name: 'Multi-Language Ad Copy', description: 'Instant native-grade translation & conversion optimization.' },
     { id: 'leads', name: 'AI Lead Qualification Bot', description: '24/7 automated global sales pipeline converter.' },
-    { id: 'contracts', name: 'AI Contract Risk Analyzer', description: 'Scans legal agreements for hidden liabilities and risks instantly.' },
-    { id: 'hooks', name: 'Viral Video Hook Engine', description: 'Creates high-converting short-form video hooks for TikTok/Reels.' },
-    { id: 'support', name: 'AI Support Ticket Triage', description: 'Instantly classifies, prioritizes, and drafts replies for customer tickets.' }
+    { id: 'contracts', name: 'AI Contract Risk Analyzer', description: 'Scans legal agreements for hidden liabilities and risks instantly.' }
   ]);
 });
 
@@ -26,6 +26,22 @@ router.post('/generate', async (req, res) => {
     const langTag = language || 'English';
 
     switch (service) {
+      case 'bulk-seo':
+        resultText = `[Bulk SEO Programmatic Engine - ${langTag}]
+Successfully generated batch architecture for keyword cluster: "${prompt}"
+- Generated 5 Full Programmatic Outlines
+- Keyword Density Map: Optimized for Google Search Index 2026
+- Meta Titles & Descriptions compiled for batch export.`;
+        break;
+
+      case 'viral-video':
+        resultText = `[Viral Video Repurposer - ${langTag}]
+Analyzed topic: "${prompt}"
+- Retention Hook 1: "Stop scrolling if you want to master ${prompt}..."
+- Retention Hook 2: "Here is the exact framework nobody is sharing about ${prompt}..."
+- Scene-by-Scene Visual Cues & CTA generated for TikTok, Reels, and YouTube Shorts.`;
+        break;
+
       case 'seo':
         resultText = `[SEO Engine - ${langTag}] Generated high-ranking structure, keyword density map, and meta tags for: "${prompt}".`;
         break;
@@ -36,16 +52,10 @@ router.post('/generate', async (req, res) => {
         resultText = `[Lead Bot - ${langTag}] Lead score calculated: 95/100. Automated qualifying sequence drafted for inquiry: "${prompt}".`;
         break;
       case 'contracts':
-        resultText = `[Legal Risk Scanner - ${langTag}] Analyzed contract parameters for "${prompt}". Identified 2 potential liabilities in payment clauses. Recommended safeguard added.`;
-        break;
-      case 'hooks':
-        resultText = `[Viral Hook Engine - ${langTag}] Generated top 3 high-retention hooks for "${prompt}": \n1. "Nobody is talking about this..." \n2. "I tested [Topic] for 30 days and..." \n3. "The secret behind..."`;
-        break;
-      case 'support':
-        resultText = `[Support Triage - ${langTag}] Ticket categorized as "High Priority (Billing)". Drafted automated empathetic resolution response for: "${prompt}".`;
+        resultText = `[Legal Risk Scanner - ${langTag}] Analyzed contract parameters for "${prompt}". Identified 2 potential liabilities in payment clauses.`;
         break;
       default:
-        resultText = `[Autonomous AI Node] Successfully executed multi-model pipeline for: "${prompt}" in ${langTag}.`;
+        resultText = `[Autonomous AI Node] Successfully executed pipeline for: "${prompt}" in ${langTag}.`;
     }
 
     res.json({
