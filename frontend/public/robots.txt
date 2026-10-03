@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://omniscale-ai-saas.vercel.app/sitemap.xml
