@@ -10,6 +10,7 @@
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^4.22.3",
+    "jsonwebtoken": "^9.0.3",
     "openai": "^6.49.0"
   },
   "engines": {
