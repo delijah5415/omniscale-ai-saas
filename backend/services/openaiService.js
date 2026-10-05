@@ -16,18 +16,25 @@ const client = new OpenAI({
 
 const model = process.env.OPENAI_MODEL || 'gpt-5.5';
 
+
 async function generateText({ instructions, input }) {
-  const response = await client.responses.create({
-    model,
-    instructions,
-    input
-  });
+	try {
+	  const response = await client.responses.create({
+	     model,
+	     instructions,
+	     input
+	    });
 
-  return response.output_text || '';
-}
+	    return response.output_text || '';
+	  } catch (error) {
+	    console.error('OpenAI API request failed:', {
+	      name: error?.name,
+	      status: error?.status,
+	      code: error?.code,
+	      type: error?.type,
+	      message: error?.message
+	  });
 
-module.exports = {
-  client,
-  model,
-  generateText
-};
+	  throw error;
+	}
+       }
