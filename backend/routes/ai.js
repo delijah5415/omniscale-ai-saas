@@ -231,10 +231,7 @@ Generate the requested OmniScale output in ${selectedLanguage}.
     res.status(500).json({
       success: false,
       error: 'The AI service could not complete the request.',
-      detail:
-        process.env.NODE_ENV === 'production'
-          ? undefined
-          : error.message
+      diagnostic: { name: error?.name, status: error?.status, code: error?.code, type: error?.type, message: error?.message }
     });
   }
 });
