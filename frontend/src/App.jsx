@@ -3,12 +3,54 @@ import React, { useEffect, useState } from 'react';
 const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 const ACCESS_TOKEN_KEY = 'omniscale_access_token';
 const PAYMENT_EMAIL_KEY = 'omniscale_payment_email';
+const SERVICE_PAGES = {
+  '/seo': {
+    id: 'seo',
+    title: 'Global SEO Blog Generator',
+    description: 'Generate search-optimized blog content, titles, meta descriptions, outlines and keyword-focused copy with OmniScale AI.',
+    useCases: ['SEO blog articles', 'SEO titles and meta descriptions', 'Keyword-focused content', 'Content refresh and expansion']
+  },
+  '/bulk-seo': {
+    id: 'bulk-seo',
+    title: 'Bulk SEO Programmatic Engine',
+    description: 'Create scalable SEO content workflows for large keyword sets, locations, products, categories and programmatic landing pages.',
+    useCases: ['Large-scale SEO generation', 'Programmatic landing pages', 'Keyword-to-content workflows', 'Location and product SEO']
+  },
+  '/viral-video': {
+    id: 'viral-video',
+    title: 'Viral Video Repurposer & Script Engine',
+    description: 'Turn ideas and source material into engaging video concepts, scripts, hooks, captions and repurposing strategies.',
+    useCases: ['Short-form video scripts', 'Attention-grabbing hooks', 'Content repurposing', 'Social video concepts']
+  },
+  '/translation': {
+    id: 'translation',
+    title: 'Multi-Language Ad Copy',
+    description: 'Create localized advertising and marketing copy across multiple languages while preserving the intended message and conversion goal.',
+    useCases: ['Multilingual advertising', 'Localized campaigns', 'International messaging', 'Cross-market variations']
+  },
+  '/leads': {
+    id: 'leads',
+    title: 'AI Lead Qualification Bot',
+    description: 'Analyze incoming leads, identify buying intent, classify prospects and produce structured qualification recommendations.',
+    useCases: ['Lead qualification', 'Buying-intent analysis', 'Sales prioritization', 'Lead-response workflows']
+  },
+  '/contracts': {
+    id: 'contracts',
+    title: 'AI Contract Risk Analyzer',
+    description: 'Review contract text for potential risks, obligations, unusual clauses and commercial concerns requiring professional review.',
+    useCases: ['Contract clause review', 'Risk identification', 'Obligation summaries', 'Commercial issue detection']
+  }
+};
+
+const SERVICE_PATHS = Object.keys(SERVICE_PAGES);
+
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [accessToken, setAccessToken] = useState('');
 
   const [activeTab, setActiveTab] = useState('builder');
+  const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState('bulk-seo');
   const [language, setLanguage] = useState('English');
@@ -69,6 +111,20 @@ export default function App() {
     };
   }, []);
 
+
+  const navigateTo = (path) => {
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+      setCurrentPath(path);
+    }
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
+
+  const currentServicePage = SERVICE_PAGES[currentPath.replace(/\/+$/, '') || '/'];
   const scrollToSection = (id) => {
     document.getElementById(id)?.scrollIntoView({
       behavior: 'smooth',
@@ -329,6 +385,187 @@ export default function App() {
     setOutput('');
   };
 
+
+  if (currentServicePage && !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <nav className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <button
+              onClick={() => navigateTo('/')}
+              className="text-xl font-black bg-gradient-to-r from-sky-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent"
+            >
+              🌐 OmniScale AI
+            </button>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigateTo('/')}
+                className="hidden sm:inline px-4 py-2 rounded-lg border border-slate-700 text-sm text-slate-300 hover:text-white"
+              >
+                Home
+              </button>
+
+              <button
+                onClick={openCheckout}
+                className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-white text-sm font-bold"
+              >
+                Get Started
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        <main>
+          <section className="relative overflow-hidden border-b border-slate-800">
+            <div className="absolute inset-0 bg-gradient-to-br from-sky-500/10 via-indigo-500/5 to-purple-500/10 pointer-events-none" />
+
+            <div className="relative max-w-7xl mx-auto px-6 py-20 md:py-28">
+              <div className="max-w-4xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold">
+                  OmniScale AI Service
+                </div>
+
+                <h1 className="text-4xl md:text-6xl font-black mt-5 leading-tight">
+                  {currentServicePage.title}
+                </h1>
+
+                <p className="text-lg text-slate-400 mt-5 max-w-3xl leading-8">
+                  {currentServicePage.description}
+                </p>
+
+                <div className="grid sm:grid-cols-2 gap-3 mt-8 max-w-3xl">
+                  {currentServicePage.useCases.map((item) => (
+                    <div
+                      key={item}
+                      className="bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300"
+                    >
+                      <span className="text-emerald-400 mr-2">✓</span>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="max-w-5xl mx-auto px-6 py-16">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8">
+              <h2 className="text-2xl md:text-3xl font-bold">
+                Use this AI service
+              </h2>
+
+              <p className="text-slate-400 mt-2 mb-6">
+                Describe exactly what you want OmniScale AI to create or analyze.
+              </p>
+
+              <form onSubmit={handleRunAiService}>
+                <div className="grid md:grid-cols-2 gap-4 mb-5">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">
+                      AI Service
+                    </label>
+
+                    <select
+                      value={selectedService}
+                      onChange={(event) => {
+                        const nextService = event.target.value;
+                        const targetPath = SERVICE_PATHS.find(
+                          (path) => SERVICE_PAGES[path].id === nextService
+                        );
+
+                        if (targetPath) {
+                          navigateTo(targetPath);
+                        } else {
+                          setSelectedService(nextService);
+                        }
+                      }}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 focus:outline-none focus:border-indigo-500"
+                    >
+                      {SERVICE_PATHS.map((path) => (
+                        <option key={SERVICE_PAGES[path].id} value={SERVICE_PAGES[path].id}>
+                          {SERVICE_PAGES[path].title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2">
+                      Language
+                    </label>
+
+                    <select
+                      value={language}
+                      onChange={(event) => setLanguage(event.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option>English</option>
+                      <option>Spanish</option>
+                      <option>French</option>
+                      <option>German</option>
+                      <option>Portuguese</option>
+                      <option>Italian</option>
+                    </select>
+                  </div>
+                </div>
+
+                <textarea
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  rows={9}
+                  placeholder="Describe what you want the AI to create..."
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-sm focus:outline-none focus:border-indigo-500 resize-y"
+                />
+
+                <div className="flex flex-wrap gap-3 mt-4">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 font-bold disabled:opacity-50"
+                  >
+                    {loading ? 'Running AI...' : 'Run AI Service'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => navigateTo('/')}
+                    className="px-6 py-3 rounded-xl bg-slate-800 border border-slate-700 font-semibold text-slate-300 hover:text-white"
+                  >
+                    Back to OmniScale
+                  </button>
+                </div>
+              </form>
+
+              {output && (
+                <div className="mt-7 bg-slate-950 border border-slate-800 rounded-xl p-5">
+                  <h3 className="font-bold mb-3">AI Output</h3>
+                  <pre className="whitespace-pre-wrap text-sm text-slate-300 leading-7">
+                    {output}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="max-w-5xl mx-auto px-6 pb-20">
+            <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-6 md:p-8 text-center">
+              <h2 className="text-2xl font-bold">Ready to scale your workflow?</h2>
+              <p className="text-slate-400 mt-2 max-w-2xl mx-auto">
+                Access the full OmniScale platform, including AI automation and the no-code platform builder.
+              </p>
+              <button
+                onClick={openCheckout}
+                className="mt-6 px-7 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 font-bold"
+              >
+                Get Started with OmniScale
+              </button>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
   if (isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100">
