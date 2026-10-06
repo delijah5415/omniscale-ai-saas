@@ -38,3 +38,9 @@ async function generateText({ instructions, input }) {
 	  throw error;
 	}
        }
+
+module.exports = {
+  client,
+  model,
+  generateText
+};
