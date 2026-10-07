@@ -14,7 +14,7 @@
       "destination": "/api"
     },
     {
-      "source": "/((?!api(?:/|$)).*)",
+      "source": "/((?!api(?:/|$)|google0538198088e0e3c7\\.html$|google9709658bc526cab2\\.html$).*)",
       "destination": "/index.html"
     }
   ],
