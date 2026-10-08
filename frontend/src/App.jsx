@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 const ACCESS_TOKEN_KEY = 'omniscale_access_token';
 const PAYMENT_EMAIL_KEY = 'omniscale_payment_email';
+const SUBSCRIPTION_ID_KEY = 'omniscale_subscription_id';
 const SERVICE_PAGES = {
   '/seo': {
     id: 'seo',
@@ -61,6 +62,7 @@ export default function App() {
   const [buildOutput, setBuildOutput] = useState('');
 
   const [paymentEmail, setPaymentEmail] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState('monthly');
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState('');
 
@@ -159,29 +161,45 @@ export default function App() {
       return;
     }
 
-    window.localStorage.setItem(PAYMENT_EMAIL_KEY, email);
+    if (selectedPlan !== 'monthly' && selectedPlan !== 'yearly') {
+      setPaymentError('Please select a subscription plan.');
+      return;
+    }
 
+    window.localStorage.setItem(PAYMENT_EMAIL_KEY, email);
     setPaymentLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/builder/create-order`, {
+      const res = await fetch(`${API_URL}/builder/create-subscription`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          userEmail: email
+          userEmail: email,
+          plan: selectedPlan
         })
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Unable to create the PayPal order.');
+        throw new Error(
+          data.error || 'Unable to create the PayPal subscription.'
+        );
       }
 
       if (!data.approvalUrl) {
-        throw new Error('PayPal did not return an approval URL.');
+        throw new Error(
+          'PayPal did not return a subscription approval URL.'
+        );
+      }
+
+      if (data.subscriptionId) {
+        window.localStorage.setItem(
+          SUBSCRIPTION_ID_KEY,
+          data.subscriptionId
+        );
       }
 
       window.location.href = data.approvalUrl;
@@ -189,37 +207,33 @@ export default function App() {
       setPaymentError(
         error instanceof Error
           ? error.message
-          : 'Unable to start PayPal checkout.'
+          : 'Unable to start PayPal subscription checkout.'
       );
-
       setPaymentLoading(false);
     }
   };
 
-  const handleCapturePayPalOrder = async () => {
+  const handleVerifyPayPalSubscription = async () => {
     const params = new URLSearchParams(window.location.search);
-    const orderId = params.get('token');
+    const subscriptionId =
+      params.get('subscription_id') ||
+      window.localStorage.getItem(SUBSCRIPTION_ID_KEY);
 
-    if (!orderId) {
+    if (!subscriptionId) {
       return;
     }
-
-    const storedEmail =
-      window.localStorage.getItem(PAYMENT_EMAIL_KEY) ||
-      paymentEmail.trim();
 
     setPaymentLoading(true);
     setPaymentError('');
 
     try {
-      const res = await fetch(`${API_URL}/builder/capture-order`, {
+      const res = await fetch(`${API_URL}/builder/verify-subscription`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          orderId,
-          userEmail: storedEmail
+          subscriptionId
         })
       });
 
@@ -227,16 +241,20 @@ export default function App() {
 
       if (!res.ok || !data.success) {
         throw new Error(
-          data.error || 'PayPal payment could not be verified.'
+          data.error || 'PayPal subscription could not be verified.'
         );
       }
 
       if (!data.accessToken) {
         throw new Error(
-          'Payment was verified, but no access token was returned.'
+          'Subscription was verified, but no access token was returned.'
         );
       }
 
+      window.localStorage.setItem(
+        SUBSCRIPTION_ID_KEY,
+        subscriptionId
+      );
       window.localStorage.setItem(
         ACCESS_TOKEN_KEY,
         data.accessToken
@@ -260,7 +278,7 @@ export default function App() {
       setPaymentError(
         error instanceof Error
           ? error.message
-          : 'PayPal payment verification failed.'
+          : 'PayPal subscription verification failed.'
       );
     } finally {
       setPaymentLoading(false);
@@ -270,12 +288,11 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    if (params.has('token') && params.has('PayerID')) {
+    if (params.has('subscription_id')) {
       setShowCheckout(true);
-      handleCapturePayPalOrder();
+      handleVerifyPayPalSubscription();
     }
   }, []);
-
   const handleBuildPlatform = async (event) => {
     event.preventDefault();
 
@@ -877,7 +894,7 @@ export default function App() {
                   onClick={openCheckout}
                   className="px-7 py-4 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 hover:opacity-90 font-bold shadow-xl shadow-sky-500/10"
                 >
-                  Get Started — $49
+                  Get Started — From $25/month
                 </button>
 
                 <button
@@ -909,10 +926,10 @@ export default function App() {
 
                 <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-5">
                   <div className="text-2xl font-black text-purple-400">
-                    One-Time
+                    Subscription
                   </div>
                   <p className="text-sm text-slate-400 mt-1">
-                    $49 access license
+                    Subscription access
                   </p>
                 </div>
               </div>
@@ -989,7 +1006,7 @@ export default function App() {
 
             <div className="grid md:grid-cols-4 gap-5">
               {[
-                ['01', 'Choose Access', 'Select the one-time OmniScale license.'],
+                ['01', 'Choose Access', 'Select an OmniScale subscription plan.'],
                 ['02', 'Secure Checkout', 'Complete payment through PayPal.'],
                 ['03', 'Describe Your Idea', 'Tell OmniScale what you want to build.'],
                 ['04', 'Create & Automate', 'Use the builder and AI automation tools.']
@@ -1018,51 +1035,103 @@ export default function App() {
         <section id="pricing" className="max-w-5xl mx-auto px-6 py-20">
           <div className="text-center">
             <p className="text-purple-400 text-sm font-bold uppercase tracking-wider">
-              Simple Access
+              Simple Subscription
             </p>
 
             <h2 className="text-4xl md:text-5xl font-black mt-3">
-              One-Time All-Access License
+              Choose Your OmniScale Plan
             </h2>
 
             <p className="text-slate-400 mt-4">
-              Get access to the OmniScale platform after successful
-              payment verification.
+              Get continued access to the OmniScale AI platform with a
+              monthly or yearly subscription.
             </p>
           </div>
 
-          <div className="max-w-md mx-auto mt-10 bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl">
-            <div className="text-center">
-              <div className="text-sm text-slate-400">
-                OmniScale AI Platform
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto mt-10">
+            <button
+              type="button"
+              onClick={() => setSelectedPlan('monthly')}
+              className={`text-left rounded-3xl p-8 border transition ${
+                selectedPlan === 'monthly'
+                  ? 'border-sky-400 bg-sky-500/10 shadow-xl shadow-sky-500/10'
+                  : 'border-slate-700 bg-slate-900 hover:border-slate-600'
+              }`}
+            >
+              <div className="text-sm text-sky-400 font-bold uppercase tracking-wider">
+                Monthly
               </div>
 
-              <div className="text-6xl font-black mt-3">
-                $49
+              <div className="text-5xl font-black mt-3">
+                $25
               </div>
 
               <div className="text-slate-500 text-sm mt-2">
-                USD • One-time payment
+                USD / month
               </div>
-            </div>
 
-            <ul className="space-y-3 mt-8 text-sm text-slate-300">
+              <p className="text-slate-400 mt-5">
+                Flexible monthly access to the OmniScale AI platform.
+              </p>
+
+              {selectedPlan === 'monthly' && (
+                <div className="mt-5 text-sm text-sky-400 font-bold">
+                  ✓ Selected
+                </div>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedPlan('yearly')}
+              className={`text-left rounded-3xl p-8 border transition ${
+                selectedPlan === 'yearly'
+                  ? 'border-purple-400 bg-purple-500/10 shadow-xl shadow-purple-500/10'
+                  : 'border-slate-700 bg-slate-900 hover:border-slate-600'
+              }`}
+            >
+              <div className="text-sm text-purple-400 font-bold uppercase tracking-wider">
+                Yearly
+              </div>
+
+              <div className="text-5xl font-black mt-3">
+                $296.40
+              </div>
+
+              <div className="text-slate-500 text-sm mt-2">
+                USD / year
+              </div>
+
+              <p className="text-slate-400 mt-5">
+                Annual access with one subscription payment per year.
+              </p>
+
+              {selectedPlan === 'yearly' && (
+                <div className="mt-5 text-sm text-purple-400 font-bold">
+                  ✓ Selected
+                </div>
+              )}
+            </button>
+          </div>
+
+          <div className="max-w-md mx-auto mt-8 bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl">
+            <ul className="space-y-3 text-sm text-slate-300">
               <li>✓ No-Code Platform Builder</li>
               <li>✓ AI Automation Services</li>
               <li>✓ Platform Specification Generation</li>
               <li>✓ AI-powered workflows</li>
-              <li>✓ Access after payment verification</li>
+              <li>✓ Access after subscription verification</li>
             </ul>
 
             <button
               onClick={openCheckout}
               className="w-full mt-8 py-4 rounded-xl bg-[#0070ba] hover:bg-[#005ea6] font-bold"
             >
-              Get Started with PayPal
+              Continue with PayPal
             </button>
 
             <p className="text-xs text-slate-500 text-center mt-4">
-              Payment is processed securely through PayPal.
+              Subscription payments are processed securely through PayPal.
             </p>
           </div>
         </section>
@@ -1092,7 +1161,7 @@ export default function App() {
 
                   <p className="text-slate-400 mt-3">
                     Enter your email and continue to PayPal to
-                    purchase the $49 one-time access license.
+                    start your selected OmniScale subscription.
                   </p>
                 </div>
 
@@ -1126,7 +1195,9 @@ export default function App() {
                   >
                     {paymentLoading
                       ? 'Starting PayPal Checkout...'
-                      : 'Pay $49 with PayPal 🔒'}
+                      : selectedPlan === 'yearly'
+                        ? 'Subscribe for $296.40/year with PayPal 🔒'
+                        : 'Subscribe for $25/month with PayPal 🔒'}
                   </button>
 
                   <p className="text-xs text-slate-500 text-center mt-4 leading-5">

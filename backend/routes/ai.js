@@ -231,7 +231,6 @@ Generate the requested OmniScale output in ${selectedLanguage}.
     res.status(500).json({
       success: false,
       error: 'The AI service could not complete the request.',
-      diagnostic: { name: error?.name, status: error?.status, code: error?.code, type: error?.type, message: error?.message }
     });
   }
 });

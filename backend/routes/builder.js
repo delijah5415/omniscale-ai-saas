@@ -4,8 +4,6 @@ const { generateText } = require('../services/openaiService');
 
 const router = express.Router();
 
-const activeSubscribers = new Map();
-
 const PAYPAL_ENV = process.env.PAYPAL_ENV || 'sandbox';
 const PAYPAL_BASE_URL =
   PAYPAL_ENV === 'live'
@@ -14,11 +12,122 @@ const PAYPAL_BASE_URL =
 
 const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID;
 const PAYPAL_SECRET = process.env.PAYPAL_SECRET;
-const PAYPAL_CURRENCY = process.env.PAYPAL_CURRENCY || 'USD';
-const PAYPAL_PRICE = process.env.PAYPAL_PRICE || '49.00';
 
-function createAccessToken() {
-  return `omni_${crypto.randomBytes(32).toString('hex')}`;
+const PAYPAL_MONTHLY_PLAN_ID =
+  process.env.PAYPAL_MONTHLY_PLAN_ID || 'P-17R87023AE0096358NLDGW7Y';
+
+const PAYPAL_YEARLY_PLAN_ID =
+  process.env.PAYPAL_YEARLY_PLAN_ID || 'P-23J62025HT742283JNLDG2HI';
+
+const PAYPAL_RETURN_URL =
+  process.env.PAYPAL_RETURN_URL ||
+  'https://omniscale-ai-saas.vercel.app/';
+
+const PAYPAL_CANCEL_URL =
+  process.env.PAYPAL_CANCEL_URL ||
+  'https://omniscale-ai-saas.vercel.app/';
+
+const OMNISCALE_ACCESS_TOKEN_SECRET =
+  process.env.OMNISCALE_ACCESS_TOKEN_SECRET;
+
+function requireAccessTokenSecret() {
+  if (!OMNISCALE_ACCESS_TOKEN_SECRET) {
+    const error = new Error(
+      'OmniScale access token security is not configured. Set OMNISCALE_ACCESS_TOKEN_SECRET.'
+    );
+    error.status = 503;
+    throw error;
+  }
+}
+
+function createSignedAccessToken(subscriptionId) {
+  requireAccessTokenSecret();
+
+  const timestamp = Date.now().toString();
+
+  const encodedSubscriptionId = Buffer
+    .from(subscriptionId, 'utf8')
+    .toString('base64url');
+
+  const payload = encodedSubscriptionId + '.' + timestamp;
+
+  const signature = crypto
+    .createHmac('sha256', OMNISCALE_ACCESS_TOKEN_SECRET)
+    .update(payload)
+    .digest('hex');
+
+  return encodedSubscriptionId + '.' + timestamp + '.' + signature;
+}
+
+function parseSignedAccessToken(accessToken) {
+  if (
+    !accessToken ||
+    typeof accessToken !== 'string' ||
+    !OMNISCALE_ACCESS_TOKEN_SECRET
+  ) {
+    return null;
+  }
+
+  const parts = accessToken.split('.');
+
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  const [encodedSubscriptionId, timestamp, signature] = parts;
+
+  if (
+    !encodedSubscriptionId ||
+    !/^\d+$/.test(timestamp) ||
+    !/^[a-f0-9]{64}$/.test(signature)
+  ) {
+    return null;
+  }
+
+  const age = Date.now() - Number(timestamp);
+
+  if (
+    !Number.isFinite(age) ||
+    age < 0 ||
+    age > 30 * 24 * 60 * 60 * 1000
+  ) {
+    return null;
+  }
+
+  const payload = encodedSubscriptionId + '.' + timestamp;
+
+  const expectedSignature = crypto
+    .createHmac('sha256', OMNISCALE_ACCESS_TOKEN_SECRET)
+    .update(payload)
+    .digest('hex');
+
+  if (
+    !crypto.timingSafeEqual(
+      Buffer.from(signature, 'hex'),
+      Buffer.from(expectedSignature, 'hex')
+    )
+  ) {
+    return null;
+  }
+
+  let subscriptionId;
+
+  try {
+    subscriptionId = Buffer
+      .from(encodedSubscriptionId, 'base64url')
+      .toString('utf8');
+  } catch {
+    return null;
+  }
+
+  if (!subscriptionId || subscriptionId.length > 255) {
+    return null;
+  }
+
+  return {
+    subscriptionId,
+    timestamp
+  };
 }
 
 function requirePayPalConfig() {
@@ -90,10 +199,10 @@ async function paypalRequest(path, options = {}) {
   return data;
 }
 
-// Create a real PayPal order.
-router.post('/create-order', async (req, res) => {
+// Create a PayPal subscription for the selected OmniScale plan.
+router.post('/create-subscription', async (req, res) => {
   try {
-    const { userEmail } = req.body;
+    const { userEmail, plan } = req.body;
 
     if (!userEmail || typeof userEmail !== 'string') {
       return res.status(400).json({
@@ -102,138 +211,157 @@ router.post('/create-order', async (req, res) => {
       });
     }
 
-    const order = await paypalRequest('/v2/checkout/orders', {
+    const normalizedPlan = String(plan || '').toLowerCase();
+
+    let planId;
+
+    if (normalizedPlan === 'monthly') {
+      planId = PAYPAL_MONTHLY_PLAN_ID;
+    } else if (normalizedPlan === 'yearly' || normalizedPlan === 'annual') {
+      planId = PAYPAL_YEARLY_PLAN_ID;
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'A valid subscription plan is required: monthly or yearly.'
+      });
+    }
+
+    const subscription = await paypalRequest('/v1/billing/subscriptions', {
       method: 'POST',
       headers: {
         'PayPal-Request-Id': crypto.randomUUID()
       },
       body: JSON.stringify({
-        intent: 'CAPTURE',
-        purchase_units: [
-          {
-            reference_id: 'omniscale-all-access',
-            description: 'OmniScale AI All-Access License',
-            custom_id: userEmail.trim(),
-            amount: {
-              currency_code: PAYPAL_CURRENCY,
-              value: PAYPAL_PRICE
-            }
-          }
-        ],
+        plan_id: planId,
+        custom_id: userEmail.trim().slice(0, 127),
         application_context: {
           brand_name: 'OmniScale AI',
-          user_action: 'PAY_NOW',
-          return_url: process.env.PAYPAL_RETURN_URL,
-          cancel_url: process.env.PAYPAL_CANCEL_URL
+          user_action: 'SUBSCRIBE_NOW',
+          shipping_preference: 'NO_SHIPPING',
+          return_url: PAYPAL_RETURN_URL,
+          cancel_url: PAYPAL_CANCEL_URL
         }
       })
     });
 
-    const approvalUrl = order.links?.find(
+    const approvalUrl = subscription.links?.find(
       (link) => link.rel === 'approve'
     )?.href;
 
     if (!approvalUrl) {
       return res.status(502).json({
         success: false,
-        error: 'PayPal did not return an approval URL.'
+        error: 'PayPal did not return a subscription approval URL.'
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
-      orderId: order.id,
+      subscriptionId: subscription.id,
+      plan: normalizedPlan,
       approvalUrl
     });
   } catch (error) {
-    console.error('Create PayPal order error:', error);
+    console.error('Create PayPal subscription error:', error);
 
-    res.status(error.status || 500).json({
+    return res.status(error.status || 500).json({
       success: false,
-      error: error.message || 'Unable to create PayPal order.'
+      error: error.message || 'Unable to create PayPal subscription.'
     });
   }
 });
 
-// Capture and verify a real PayPal order.
-router.post('/capture-order', async (req, res) => {
+// Verify a PayPal subscription after the customer returns from PayPal.
+router.post('/verify-subscription', async (req, res) => {
   try {
-    const { orderId } = req.body;
+    const { subscriptionId } = req.body;
 
-    if (!orderId || typeof orderId !== 'string') {
+    if (!subscriptionId || typeof subscriptionId !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'PayPal order ID is required.'
+        error: 'PayPal subscription ID is required.'
       });
     }
 
-    const capture = await paypalRequest(
-      `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`,
-      {
-        method: 'POST',
-        headers: {
-          'PayPal-Request-Id': crypto.randomUUID()
-        },
-        body: JSON.stringify({})
-      }
+    const subscription = await paypalRequest(
+      `/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      { method: 'GET' }
     );
 
-    if (capture.status !== 'COMPLETED') {
+    const status = String(subscription.status || '').toUpperCase();
+
+    if (status !== 'ACTIVE') {
       return res.status(402).json({
         success: false,
-        error: 'PayPal payment was not completed.',
-        status: capture.status
+        error: 'The PayPal subscription is not active.',
+        status
       });
     }
 
-    const purchaseUnit = capture.purchase_units?.[0];
-    const capturedPayment =
-      purchaseUnit?.payments?.captures?.[0];
+    const planId = subscription.plan_id;
 
-    const capturedAmount =
-      capturedPayment?.amount?.value;
+    const validPlan =
+      planId === PAYPAL_MONTHLY_PLAN_ID ||
+      planId === PAYPAL_YEARLY_PLAN_ID;
 
-    const capturedCurrency =
-      capturedPayment?.amount?.currency_code;
-
-    if (
-      capturedAmount !== PAYPAL_PRICE ||
-      capturedCurrency !== PAYPAL_CURRENCY
-    ) {
-      console.error('PayPal amount mismatch:', {
-        expectedAmount: PAYPAL_PRICE,
-        expectedCurrency: PAYPAL_CURRENCY,
-        capturedAmount,
-        capturedCurrency,
-        orderId
-      });
-
+    if (!validPlan) {
       return res.status(402).json({
         success: false,
-        error: 'Payment amount or currency could not be verified.'
+        error: 'The PayPal subscription plan could not be verified.'
       });
     }
 
-    const accessToken = createAccessToken();
+    const accessToken = createSignedAccessToken(subscriptionId);
 
-    activeSubscribers.set(accessToken, {
-      orderId,
-      createdAt: Date.now(),
-      email: purchaseUnit.custom_id || null
-    });
-
-    res.json({
+    return res.json({
       success: true,
       accessToken,
-      orderId,
-      message: 'Payment verified and access granted.'
+      subscriptionId,
+      plan: planId === PAYPAL_MONTHLY_PLAN_ID ? 'monthly' : 'yearly',
+      status,
+      message: 'Subscription verified and access granted.'
     });
   } catch (error) {
-    console.error('Capture PayPal order error:', error);
+    console.error('Verify PayPal subscription error:', error);
 
-    res.status(error.status || 500).json({
+    return res.status(error.status || 500).json({
       success: false,
-      error: error.message || 'Unable to capture PayPal order.'
+      error: error.message || 'Unable to verify PayPal subscription.'
+    });
+  }
+});
+
+// Check whether a PayPal subscription is still active.
+router.post('/check-subscription', async (req, res) => {
+  try {
+    const { subscriptionId } = req.body;
+
+    if (!subscriptionId || typeof subscriptionId !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'PayPal subscription ID is required.'
+      });
+    }
+
+    const subscription = await paypalRequest(
+      `/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      { method: 'GET' }
+    );
+
+    const status = String(subscription.status || '').toUpperCase();
+
+    return res.json({
+      success: true,
+      subscriptionId,
+      status,
+      active: status === 'ACTIVE'
+    });
+  } catch (error) {
+    console.error('Check PayPal subscription error:', error);
+
+    return res.status(error.status || 500).json({
+      success: false,
+      error: error.message || 'Unable to check PayPal subscription.'
     });
   }
 });
@@ -243,10 +371,37 @@ router.post('/build-platform', async (req, res) => {
   try {
     const { accessToken, platformPrompt } = req.body;
 
-    if (!accessToken || !activeSubscribers.has(accessToken)) {
+    const tokenData = parseSignedAccessToken(accessToken);
+
+    if (!tokenData) {
       return res.status(401).json({
         success: false,
-        error: 'Unauthorized. Please complete PayPal payment first.'
+        error: 'Unauthorized. Please complete an active PayPal subscription first.'
+      });
+    }
+
+    const subscription = await paypalRequest(
+      '/v1/billing/subscriptions/' + encodeURIComponent(tokenData.subscriptionId),
+      { method: 'GET' }
+    );
+
+    const subscriptionStatus =
+      String(subscription.status || '').toUpperCase();
+
+    const subscriptionPlanId = subscription.plan_id;
+
+    const validSubscription =
+      subscriptionStatus === 'ACTIVE' &&
+      (
+        subscriptionPlanId === PAYPAL_MONTHLY_PLAN_ID ||
+        subscriptionPlanId === PAYPAL_YEARLY_PLAN_ID
+      );
+
+    if (!validSubscription) {
+      return res.status(401).json({
+        success: false,
+        error: 'Your OmniScale PayPal subscription is not active.',
+        status: subscriptionStatus
       });
     }
 
