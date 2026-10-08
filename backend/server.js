@@ -35,15 +35,6 @@ app.get('/', (req, res) => {
   });
 });
 
-app.get('/api/debug/paypal-config', (req, res) => {
-  res.set('Cache-Control', 'no-store');
-  res.json({
-    paypalClientIdPresent: Boolean(process.env.PAYPAL_CLIENT_ID?.trim()),
-    paypalSecretPresent: Boolean(process.env.PAYPAL_SECRET?.trim()),
-    nodeEnv: process.env.NODE_ENV || 'unset'
-  });
-});
-
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
