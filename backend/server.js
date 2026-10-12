@@ -1,24 +1,69 @@
 const express = require('express');
 const cors = require('cors');
-const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const { rateLimit } = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
 
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
-const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID;
-const PAYPAL_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://api-m.paypal.com'
-  : 'https://api-m.sandbox.paypal.com';
+
+// Allow only explicitly configured frontend origins.
+const allowedOrigins = new Set(
+  (
+    process.env.CLIENT_ORIGINS ||
+    process.env.CLIENT_ORIGIN ||
+    'https://omniscale-ai-saas.vercel.app,https://omniscale-ai-scale.vercel.app'
+  ).split(',').map(origin => origin.trim()).filter(Boolean)
+);
+
+app.use(helmet());
 
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || true,
-  credentials: true
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 }));
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+const apiRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: req => req.method === 'OPTIONS',
+  message: { success: false, error: 'Too many API requests. Try again later.' }
+});
+
+const aiRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: req => req.method === 'OPTIONS',
+  message: { success: false, error: 'AI request limit reached. Try again later.' }
+});
+
+const buildRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: req => req.method === 'OPTIONS',
+  message: { success: false, error: 'Build request limit reached. Try again later.' }
+});
+
+app.use('/api', apiRateLimit);
+app.use('/api/ai/generate', aiRateLimit);
+app.use('/api/builder/build-platform', buildRateLimit);
+
 
 const aiRoutes = require('./routes/ai');
 const builderRoutes = require('./routes/builder');

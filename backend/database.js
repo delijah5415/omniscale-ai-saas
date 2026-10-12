@@ -10,15 +10,21 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 async function getUserProfile(userId) {
+  if (!userId) {
+    throw new Error('A user ID is required to load a profile.');
+  }
+
   const { data, error } = await supabaseAdmin
     .from('user_profiles')
     .select('*')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') {
-    console.error('Error fetching user profile:', error);
+  if (error) {
+    console.error('Error fetching user profile:', error.message);
+    throw new Error('Unable to verify the account subscription status.');
   }
+
   return data;
 }
 
