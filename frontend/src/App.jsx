@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AuthPanel from './components/AuthPanel.jsx';
 import AccountDashboard from './components/AccountDashboard';
 import { supabase } from './lib/supabase.js';
@@ -72,6 +72,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [showLegal, setShowLegal] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
+  const verificationInProgress = useRef(false);
 
   const handleSupabaseAuthChange = useCallback((user, session) => {
       const token = session?.access_token || '';
@@ -149,11 +150,18 @@ export default function App() {
     setPaymentLoading(true);
 
     try {
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (sessionError || !token) {
+        throw new Error('Please sign in again before continuing.');
+      }
       const res = await fetch(`${API_URL}/builder/create-subscription`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-	  Authorization: `Bearer ${accessToken}`,
+	  Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           userEmail: email,
@@ -207,11 +215,18 @@ export default function App() {
     setPaymentError('');
 
     try {
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (sessionError || !token) {
+        throw new Error('Please sign in again before continuing.');
+      }
       const res = await fetch(`${API_URL}/builder/verify-subscription`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-	  Authorization: `Bearer ${accessToken}`,
+	  Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           subscriptionId
@@ -257,9 +272,17 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    if (params.has('subscription_id') && accessToken) {
+    if (
+      params.has('subscription_id') &&
+      accessToken &&
+      !verificationInProgress.current
+    ) {
+      verificationInProgress.current = true;
       setShowCheckout(true);
-      handleVerifyPayPalSubscription();
+
+      handleVerifyPayPalSubscription().finally(() => {
+        verificationInProgress.current = false;
+      });
     }
   }, [accessToken]);
   const handleBuildPlatform = async (event) => {
@@ -281,16 +304,21 @@ export default function App() {
     setBuildOutput('');
 
     try {
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (sessionError || !token) {
+        throw new Error('Please sign in again before continuing.');
+      }
+
       const res = await fetch(`${API_URL}/builder/build-platform`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-	  Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          accessToken,
-          platformPrompt
-        })
+        body: JSON.stringify({ platformPrompt })
       });
 
       const data = await res.json();
@@ -328,17 +356,21 @@ export default function App() {
     setOutput('');
 
     try {
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (sessionError || !token) {
+        throw new Error('Please sign in again before continuing.');
+      }
+
       const res = await fetch(`${API_URL}/ai/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-	  Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          service: selectedService,
-          prompt,
-          language
-        })
+        body: JSON.stringify({ service: selectedService, prompt, language })
       });
 
       const data = await res.json();
