@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 
 const { generateText, model } = require('../services/openaiService');
+const { requireAuth } = require('../middleware/auth');
+const { getUserProfile } = require('../database');
 
 const services = [
   {
@@ -156,7 +158,7 @@ Do not claim that a clause is legally invalid unless the applicable jurisdiction
 `
 };
 
-router.post('/generate', async (req, res) => {
+router.post('/generate', requireAuth, async (req, res) => {
   try {
     const { service, prompt, language } = req.body;
 
@@ -178,6 +180,15 @@ router.post('/generate', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: `Unsupported AI service: ${service}`
+      });
+    }
+
+    const profile = await getUserProfile(req.user.id);
+
+    if (!profile || profile.status !== 'active') {
+      return res.status(403).json({
+        success: false,
+        error: 'An active subscription is required to use AI generation.'
       });
     }
 
