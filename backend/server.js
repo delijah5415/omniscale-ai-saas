@@ -22,9 +22,11 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 const aiRoutes = require('./routes/ai');
 const builderRoutes = require('./routes/builder');
+const accountRoutes = require('./routes/account');
 
 app.use('/api/ai', aiRoutes);
 app.use('/api/builder', builderRoutes);
+app.use('/api/account', accountRoutes);
 
 app.get('/', (req, res) => {
   res.json({

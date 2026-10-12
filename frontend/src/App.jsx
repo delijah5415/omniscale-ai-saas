@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AuthPanel from './components/AuthPanel.jsx';
+import AccountDashboard from './components/AccountDashboard';
 import { supabase } from './lib/supabase.js';
 
 const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
@@ -1021,6 +1022,9 @@ export default function App() {
             </p>
           </div>
           <AuthPanel onAuthChange={handleSupabaseAuthChange} />
+          {isAuthenticated && accessToken && (
+            <AccountDashboard accessToken={accessToken} />
+          )}
         </section>
 
         <section id="pricing" className="max-w-5xl mx-auto px-6 py-20">
