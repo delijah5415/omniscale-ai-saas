@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import AuthPanel from './components/AuthPanel.jsx';
+import { supabase } from './lib/supabase.js';
 
 const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 const ACCESS_TOKEN_KEY = 'omniscale_access_token';
@@ -70,47 +72,23 @@ export default function App() {
   const [showLegal, setShowLegal] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
 
-  useEffect(() => {
-    const savedToken = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-    const savedEmail = window.localStorage.getItem(PAYMENT_EMAIL_KEY);
+  const handleSupabaseAuthChange = useCallback((user, session) => {
+      const token = session?.access_token || '';
 
-    if (savedToken) {
-      setAccessToken(savedToken);
-      setIsAuthenticated(true);
-    }
+      setAccessToken(token);
+      setIsAuthenticated(Boolean(user && token));
 
-    if (savedEmail) {
-      setPaymentEmail(savedEmail);
+      if (user?.email) {
+      setPaymentEmail(user.email);
     }
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    const savedEmail = window.localStorage.getItem(PAYMENT_EMAIL_KEY);
 
-    fetch(`${API_URL}/ai/services`)
-      .then(async (res) => {
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data.error || 'Unable to load AI services.');
-        }
-
-        return data;
-      })
-      .then((data) => {
-        if (!cancelled) {
-          setServices(Array.isArray(data) ? data : []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setServices([]);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    if (savedEmail) {
+      setPaymentEmail(savedEmail);
+    }
   }, []);
 
 
@@ -173,7 +151,8 @@ export default function App() {
       const res = await fetch(`${API_URL}/builder/create-subscription`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+	  Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           userEmail: email,
@@ -230,7 +209,8 @@ export default function App() {
       const res = await fetch(`${API_URL}/builder/verify-subscription`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+	  Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           subscriptionId
@@ -245,23 +225,11 @@ export default function App() {
         );
       }
 
-      if (!data.accessToken) {
-        throw new Error(
-          'Subscription was verified, but no access token was returned.'
-        );
-      }
-
       window.localStorage.setItem(
         SUBSCRIPTION_ID_KEY,
         subscriptionId
       );
-      window.localStorage.setItem(
-        ACCESS_TOKEN_KEY,
-        data.accessToken
-      );
 
-      setAccessToken(data.accessToken);
-      setIsAuthenticated(true);
       setShowCheckout(false);
 
       window.history.replaceState(
@@ -288,11 +256,11 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    if (params.has('subscription_id')) {
+    if (params.has('subscription_id') && accessToken) {
       setShowCheckout(true);
       handleVerifyPayPalSubscription();
     }
-  }, []);
+  }, [accessToken]);
   const handleBuildPlatform = async (event) => {
     event.preventDefault();
 
@@ -315,7 +283,8 @@ export default function App() {
       const res = await fetch(`${API_URL}/builder/build-platform`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+	  Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           accessToken,
@@ -361,7 +330,8 @@ export default function App() {
       const res = await fetch(`${API_URL}/ai/generate`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+	  Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           service: selectedService,
@@ -393,7 +363,14 @@ export default function App() {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error('Supabase sign-out failed:', error.message);
+      return;
+    }
+
     window.localStorage.removeItem(ACCESS_TOKEN_KEY);
     setAccessToken('');
     setIsAuthenticated(false);
@@ -1030,6 +1007,20 @@ export default function App() {
               ))}
             </div>
           </div>
+        </section>
+
+        <section id="account" className="max-w-3xl mx-auto px-6 pt-12">
+          <div className="text-center mb-5">
+            <p className="text-sky-400 text-sm font-bold uppercase tracking-wider">
+              Your Account
+            </p>
+            <h2 className="text-3xl font-black mt-2">Sign up or sign in</h2>
+            <p className="text-slate-400 mt-3">
+              Create an account or sign in before subscribing. A paid subscription
+              is still required for premium features.
+            </p>
+          </div>
+          <AuthPanel onAuthChange={handleSupabaseAuthChange} />
         </section>
 
         <section id="pricing" className="max-w-5xl mx-auto px-6 py-20">
