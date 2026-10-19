@@ -72,6 +72,8 @@ const accountRoutes = require('./routes/account');
 app.use('/api/ai', aiRoutes);
 app.use('/api/builder', builderRoutes);
 app.use('/api/account', accountRoutes);
+const messagesRouter = require('./routes/messages');
+app.use('/api/messages', messagesRouter);
 
 app.get('/', (req, res) => {
   res.json({

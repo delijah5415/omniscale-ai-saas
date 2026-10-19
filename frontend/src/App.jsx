@@ -2,6 +2,7 @@ import TermsAndConditionsModal from "./components/TermsAndConditionsModal.jsx";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AuthPanel from './components/AuthPanel.jsx';
 import AccountDashboard from './components/AccountDashboard';
+import VideoAdBanner from './components/VideoAdBanner'; // Added local video advertisement component
 import { supabase } from './lib/supabase.js';
 
 const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
@@ -478,6 +479,9 @@ export default function App() {
           </div>
         </nav>
         <main className="max-w-7xl mx-auto px-6 py-10">
+          {/* Embedded Video Advertisement with Local Storage tracking */}
+          <VideoAdBanner />
+
           <section className="mb-8">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
               ✓ Payment Verified & Authenticated
@@ -643,6 +647,11 @@ export default function App() {
           <div className="absolute inset-0 bg-gradient-to-br from-sky-500/10 via-indigo-500/5 to-purple-500/10 pointer-events-none" />
           <div className="relative max-w-7xl mx-auto px-6 py-24 md:py-32">
             <div className="max-w-4xl">
+              {/* Embedded Video Advertisement Banner on Landing Page */}
+              <div className="mb-10">
+                <VideoAdBanner />
+              </div>
+
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400 text-xs font-bold uppercase tracking-wider">
                 AI Automation • No-Code Development • Digital Platforms
               </div>
@@ -780,13 +789,9 @@ export default function App() {
                     type="button"
                     onClick={handlePayPalCheckout}
                     disabled={paymentLoading}
-                    className="w-full mt-5 bg-[#0070ba] hover:bg-[#005ea6] disabled:opacity-50 text-white font-bold py-4 rounded-xl transition shadow-lg"
+                    className="w-full mt-6 py-4 rounded-xl bg-[#0070ba] hover:bg-[#005ea6] text-white font-bold disabled:opacity-50"
                   >
-                    {paymentLoading
-                      ? 'Starting PayPal Checkout...'
-                      : selectedPlan === 'yearly'
-                        ? 'Subscribe for $296.40/year with PayPal 🔒'
-                        : 'Subscribe for $25/month with PayPal 🔒'}
+                    {paymentLoading ? 'Redirecting to PayPal...' : 'Proceed to PayPal Checkout'}
                   </button>
                 </div>
               </div>
