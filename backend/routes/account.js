@@ -10,6 +10,13 @@ const PAYPAL_BASE_URL =
     ? 'https://api-m.paypal.com'
     : 'https://api-m.sandbox.paypal.com';
 
+function validEntitlementEnd(profile) {
+  const value = profile?.entitlement_ends_at;
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
 async function paypalRequest(path, options = {}) {
   const clientId = process.env.PAYPAL_CLIENT_ID;
   const secret = process.env.PAYPAL_SECRET;
@@ -53,39 +60,76 @@ async function paypalRequest(path, options = {}) {
 }
 
 async function cancelActiveSubscription(profile, userId) {
-  if (profile?.status !== 'active') return;
+  if (!profile) return { providerStatus: 'none', entitlementEndsAt: null, requiresReview: false };
 
-  if (!profile.subscription_id) {
-    throw new Error('An active subscription has no stored PayPal subscription ID. Contact support before deleting this account.');
+  const profileStatus = String(profile.status || '').toLowerCase();
+  const subscriptionId = profile.subscription_id;
+
+  if (!subscriptionId) {
+    if (profileStatus === 'active') {
+      throw new Error('The active account has no stored PayPal subscription ID. Contact support before deleting this account.');
+    }
+    return {
+      providerStatus: 'not_linked',
+      entitlementEndsAt: validEntitlementEnd(profile),
+      requiresReview: profileStatus === 'cancelled' || profileStatus === 'canceled' ||
+        profileStatus === 'cancelled_pending_review'
+    };
   }
 
-  const subscription = await paypalRequest(
-    `/v1/billing/subscriptions/${encodeURIComponent(profile.subscription_id)}`
-  );
+  const path = `/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}`;
+  const subscription = await paypalRequest(path);
 
-  if (subscription.custom_id && subscription.custom_id !== userId) {
-    throw new Error('The subscription ownership check failed.');
+  // Do not accept missing ownership metadata: the user must match exactly.
+  if (String(subscription.custom_id || '') !== String(userId)) {
+    throw new Error('Subscription ownership could not be verified. The account was retained for review.');
   }
 
-  if (subscription.status === 'ACTIVE') {
-    await paypalRequest(
-      `/v1/billing/subscriptions/${encodeURIComponent(profile.subscription_id)}/cancel`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ reason: 'Requested by the account holder' })
-      }
-    );
+  let providerStatus = String(subscription.status || '').toUpperCase();
+
+  if (providerStatus === 'ACTIVE') {
+    await paypalRequest(`${path}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Requested by the account holder' })
+    });
+
+    // Re-fetch provider state rather than assuming the cancellation succeeded.
+    const confirmation = await paypalRequest(path);
+    providerStatus = String(confirmation.status || '').toUpperCase();
+  }
+
+  if (providerStatus !== 'CANCELLED') {
+    throw new Error('PayPal has not confirmed a cancelled subscription. The account was retained for review.');
+  }
+
+  const entitlementEndsAt = validEntitlementEnd(profile);
+  const now = Date.now();
+  let localStatus;
+  let requiresReview = false;
+
+  if (!entitlementEndsAt) {
+    // Do not invent a paid-through date or silently revoke existing access.
+    localStatus = 'cancelled_pending_review';
+    requiresReview = true;
+  } else if (Date.parse(entitlementEndsAt) <= now) {
+    localStatus = 'expired';
+  } else {
+    localStatus = 'cancelled';
   }
 
   const { error } = await updateUserSubscription(userId, {
-    subscriptionId: profile.subscription_id,
+    subscriptionId,
     plan: profile.plan_type,
-    status: 'cancelled'
+    status: localStatus,
+    ...(entitlementEndsAt ? { entitlementEndsAt } : {})
   });
 
   if (error) {
-    throw new Error('PayPal cancellation was processed, but the account status could not be updated. Contact support.');
+    console.error('PayPal cancellation confirmed, but local subscription update failed:', error.message);
+    throw new Error('PayPal cancellation was confirmed, but the local account update failed. The account was retained; support must reconcile the billing record.');
   }
+
+  return { providerStatus, entitlementEndsAt, requiresReview, localStatus };
 }
 
 router.get('/me', requireAuth, async (req, res) => {
@@ -99,7 +143,8 @@ router.get('/me', requireAuth, async (req, res) => {
         plan: profile?.plan_type || null,
         status: profile?.status || 'no_subscription',
         updatedAt: profile?.updated_at || null,
-        hasSubscription: Boolean(profile?.subscription_id)
+        hasSubscription: Boolean(profile?.subscription_id),
+        entitlementEndsAt: validEntitlementEnd(profile)
       }
     });
   } catch (error) {
@@ -114,25 +159,36 @@ router.get('/me', requireAuth, async (req, res) => {
 router.post('/cancel-subscription', requireAuth, async (req, res) => {
   try {
     const profile = await getUserProfile(req.user.id);
+    const status = String(profile?.status || '').toLowerCase();
 
-    if (!profile || profile.status !== 'active') {
+    if (!profile || !['active', 'cancelled_pending_review'].includes(status)) {
       return res.status(409).json({
         success: false,
-        error: 'There is no active subscription to cancel.'
+        error: 'There is no cancellable subscription on this account.'
       });
     }
 
-    await cancelActiveSubscription(profile, req.user.id);
+    const result = await cancelActiveSubscription(profile, req.user.id);
 
     return res.json({
       success: true,
-      message: 'Subscription cancellation processed. Premium access has been disabled.'
+      cancellationConfirmed: result.providerStatus === 'CANCELLED',
+      status: result.localStatus || profile.status,
+      entitlementEndsAt: result.entitlementEndsAt,
+      requiresReview: result.requiresReview,
+      hasAccessPendingReview: result.requiresReview,
+      message: result.requiresReview
+        ? 'PayPal cancellation is confirmed. Your account is retained and access remains pending billing-date review.'
+        : result.entitlementEndsAt && Date.parse(result.entitlementEndsAt) > Date.now()
+          ? 'PayPal cancellation is confirmed. Access remains available until the recorded entitlement end date.'
+          : 'PayPal cancellation is confirmed and the recorded entitlement has expired.'
     });
   } catch (error) {
     console.error('Subscription cancellation failed:', error.message);
     return res.status(502).json({
       success: false,
-      error: error.message || 'Unable to cancel the subscription. Contact support before retrying.'
+      cancellationConfirmed: false,
+      error: error.message || 'Unable to confirm subscription cancellation. Contact support before retrying.'
     });
   }
 });
@@ -140,9 +196,37 @@ router.post('/cancel-subscription', requireAuth, async (req, res) => {
 router.post('/delete', requireAuth, async (req, res) => {
   try {
     const profile = await getUserProfile(req.user.id);
+    let cancellationResult = null;
 
-    // Cancel billing before deleting the user. If PayPal fails, retain the account.
-    await cancelActiveSubscription(profile, req.user.id);
+    if (
+      profile &&
+      (String(profile.status || '').toLowerCase() === 'active' ||
+       String(profile.status || '').toLowerCase() === 'cancelled_pending_review' ||
+       profile.subscription_id)
+    ) {
+      cancellationResult = await cancelActiveSubscription(profile, req.user.id);
+    }
+
+    const end = cancellationResult?.entitlementEndsAt || validEntitlementEnd(profile);
+    const status = String(cancellationResult?.localStatus || profile?.status || '').toLowerCase();
+    const stillOwedAccess = end && Date.parse(end) > Date.now();
+    const unknownPaidThroughDate =
+      status === 'active' || status === 'cancelled_pending_review' ||
+      ((status === 'cancelled' || status === 'canceled') && !end) ||
+      Boolean(cancellationResult?.requiresReview);
+
+    if (stillOwedAccess || unknownPaidThroughDate) {
+      return res.status(409).json({
+        success: false,
+        deletionBlocked: true,
+        cancellationConfirmed: cancellationResult?.providerStatus === 'CANCELLED',
+        entitlementEndsAt: end || null,
+        requiresReview: unknownPaidThroughDate,
+        error: stillOwedAccess
+          ? 'Billing is cancelled, but paid access has not ended. The account is retained until the recorded entitlement end date.'
+          : 'The paid-through date or billing state cannot be verified. The account is retained for support review.'
+      });
+    }
 
     const { error: deleteUserError } =
       await supabaseAdmin.auth.admin.deleteUser(req.user.id);
@@ -151,11 +235,10 @@ router.post('/delete', requireAuth, async (req, res) => {
       console.error('Supabase account deletion failed:', deleteUserError.message);
       return res.status(500).json({
         success: false,
-        error: 'The account could not be deleted. Contact support if your subscription was already cancelled.'
+        error: 'The account could not be deleted. Billing may already be cancelled; contact support before retrying.'
       });
     }
 
-    // Clean up the profile if it was not removed by a database cascade.
     const { error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .delete()
@@ -165,10 +248,7 @@ router.post('/delete', requireAuth, async (req, res) => {
       console.error('Profile cleanup after account deletion failed:', profileError.message);
     }
 
-    return res.json({
-      success: true,
-      message: 'Your account has been deleted.'
-    });
+    return res.json({ success: true, message: 'Your account has been deleted.' });
   } catch (error) {
     console.error('Account deletion failed:', error.message);
     return res.status(502).json({

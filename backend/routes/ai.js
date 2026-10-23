@@ -4,6 +4,7 @@ const router = express.Router();
 const { generateText, model } = require('../services/openaiService');
 const { requireAuth } = require('../middleware/auth');
 const { getUserProfile } = require('../database');
+const { getSubscriptionEntitlement } = require('../subscriptionEntitlement');
 
 const services = [
   {
@@ -185,7 +186,7 @@ router.post('/generate', requireAuth, async (req, res) => {
 
     const profile = await getUserProfile(req.user.id);
 
-    if (!profile || profile.status !== 'active') {
+    if (!getSubscriptionEntitlement(profile).hasAccess) {
       return res.status(403).json({
         success: false,
         error: 'An active subscription is required to use AI generation.'

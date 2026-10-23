@@ -94,14 +94,19 @@ export default function App() {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
-        if (data.success && (data.active || data.status === 'active')) {
-          setSubscriptionStatus('active');
-        } else {
-          setSubscriptionStatus('inactive');
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Subscription status could not be verified.');
         }
+
+        setSubscriptionStatus(
+          data.hasAccess === true
+            ? 'active'
+            : 'inactive'
+        );
       } catch (err) {
         console.error('Subscription verification failed:', err);
-        setSubscriptionStatus('inactive');
+        setSubscriptionStatus('unknown');
       }
     } else {
       setSubscriptionStatus('unknown');
@@ -562,9 +567,12 @@ export default function App() {
                       onChange={(event) => setSelectedService(event.target.value)}
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 focus:outline-none focus:border-indigo-500"
                     >
-                      <option value="bulk-seo">Bulk SEO</option>
-                      <option value="content">AI Content</option>
-                      <option value="marketing">Marketing Automation</option>
+                      <option value="seo">Global SEO Blog Generator</option>
+                      <option value="bulk-seo">Bulk SEO Programmatic Engine</option>
+                      <option value="viral-video">Viral Video Repurposer &amp; Script Engine</option>
+                      <option value="translation">Multi-Language Ad Copy</option>
+                      <option value="leads">AI Lead Qualification Bot</option>
+                      <option value="contracts">AI Contract Risk Analyzer</option>
                     </select>
                   </div>
                   <div>
@@ -681,6 +689,77 @@ export default function App() {
             </div>
           </div>
         </section>
+        <section id="features" className="px-6 py-16">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-10">
+              <p className="text-indigo-400 font-semibold mb-2">PLATFORM FEATURES</p>
+              <h2 className="text-3xl md:text-4xl font-bold">AI tools built to scale your work</h2>
+              <p className="text-slate-400 mt-4 max-w-2xl mx-auto">
+                Explore the six AI services configured for OmniScale.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <article className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
+                <h3 className="text-xl font-semibold mb-3">Global SEO Blog Generator</h3>
+                <p className="text-slate-400">Create SEO-focused blog content for your audience.</p>
+              </article>
+              <article className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
+                <h3 className="text-xl font-semibold mb-3">Bulk SEO Programmatic Engine</h3>
+                <p className="text-slate-400">Support scalable, repeatable SEO content workflows.</p>
+              </article>
+              <article className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
+                <h3 className="text-xl font-semibold mb-3">Viral Video Repurposer</h3>
+                <p className="text-slate-400">Develop video repurposing ideas and scripts.</p>
+              </article>
+              <article className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
+                <h3 className="text-xl font-semibold mb-3">Multi-Language Ad Copy</h3>
+                <p className="text-slate-400">Prepare ad copy for different language audiences.</p>
+              </article>
+              <article className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
+                <h3 className="text-xl font-semibold mb-3">AI Lead Qualification Bot</h3>
+                <p className="text-slate-400">Assist with lead qualification and prioritization.</p>
+              </article>
+              <article className="rounded-2xl border border-slate-700 bg-slate-900 p-6">
+                <h3 className="text-xl font-semibold mb-3">AI Contract Risk Analyzer</h3>
+                <p className="text-slate-400">Flag potential contract risks for human review. Not legal advice.</p>
+              </article>
+            </div>
+            <div className="text-center mt-8">
+              <button type="button" onClick={() => scrollToSection('account')}
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3">
+                Get Started
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section id="how-it-works" className="px-6 py-16 bg-slate-950">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center mb-10">
+              <p className="text-indigo-400 font-semibold mb-2">HOW IT WORKS</p>
+              <h2 className="text-3xl md:text-4xl font-bold">From signup to AI workflow</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <article className="rounded-2xl border border-slate-700 p-6">
+                <h3 className="text-lg font-semibold mb-2">1. Create an account</h3>
+                <p className="text-slate-400">Register or sign in using the configured authentication flow.</p>
+              </article>
+              <article className="rounded-2xl border border-slate-700 p-6">
+                <h3 className="text-lg font-semibold mb-2">2. Choose a subscription</h3>
+                <p className="text-slate-400">Review a plan and complete the payment provider checkout.</p>
+              </article>
+              <article className="rounded-2xl border border-slate-700 p-6">
+                <h3 className="text-lg font-semibold mb-2">3. Verify access</h3>
+                <p className="text-slate-400">Paid features should be enabled only after subscription verification.</p>
+              </article>
+              <article className="rounded-2xl border border-slate-700 p-6">
+                <h3 className="text-lg font-semibold mb-2">4. Run an AI workflow</h3>
+                <p className="text-slate-400">Choose a supported service, enter a prompt, and review the output.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section id="account" className="max-w-3xl mx-auto px-6 pt-12">
           <div className="text-center mb-5">
             <p className="text-sky-400 text-sm font-bold uppercase tracking-wider">Your Account</p>

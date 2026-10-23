@@ -4,6 +4,7 @@ const router = express.Router();
 const { generateText } = require('../services/openaiService');
 const { requireAuth } = require('../middleware/auth');
 const { updateUserSubscription, getUserProfile } = require('../database');
+const { getSubscriptionEntitlement } = require('../subscriptionEntitlement');
 
 const PAYPAL_ENV = process.env.PAYPAL_ENV || 'sandbox';
 const PAYPAL_BASE_URL = PAYPAL_ENV === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
@@ -155,10 +156,37 @@ router.post('/verify-subscription', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/subscription-status', requireAuth, async (req, res) => {
+  try {
+    const profile = await getUserProfile(req.user.id);
+    const entitlement = getSubscriptionEntitlement(profile);
+    const status = entitlement.status;
+
+    return res.json({
+      success: true,
+      active: entitlement.hasAccess,
+      hasAccess: entitlement.hasAccess,
+      entitlementEndsAt: entitlement.entitlementEndsAt,
+      requiresReview: entitlement.requiresReview,
+      status,
+      plan: profile?.plan_type || null,
+      hasSubscription: Boolean(profile?.subscription_id),
+      updatedAt: profile?.updated_at || null
+    });
+  } catch (error) {
+    console.error('Subscription status lookup failed:', error.message);
+
+    return res.status(503).json({
+      success: false,
+      error: 'Subscription status is temporarily unavailable. Please retry.'
+    });
+  }
+});
+
 router.post('/build-platform', requireAuth, async (req, res) => {
   try {
     const profile = await getUserProfile(req.user.id);
-    if (!profile || profile.status !== 'active') {
+    if (!getSubscriptionEntitlement(profile).hasAccess) {
       return res.status(403).json({ success: false, error: 'Active subscription required to access Platform Builder.' });
     }
 

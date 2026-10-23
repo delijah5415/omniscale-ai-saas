@@ -29,18 +29,68 @@ async function getUserProfile(userId) {
 }
 
 async function updateUserSubscription(userId, subscriptionData) {
-  const { data, error } = await supabaseAdmin
-    .from('user_profiles')
-    .upsert({
-      user_id: userId,
-      subscription_id: subscriptionData.subscriptionId,
-      plan_type: subscriptionData.plan,
-      status: subscriptionData.status,
-      updated_at: new Date().toISOString()
-    });
+  if (!userId || !subscriptionData || typeof subscriptionData !== 'object') {
+    return {
+      data: null,
+      error: new Error('A user ID and subscription data are required.')
+    };
+  }
 
-  if (error) console.error('Error updating subscription profile:', error);
-  return { data, error };
+  const payload = {
+    updated_at: new Date().toISOString()
+  };
+
+  const fieldMap = {
+    subscriptionId: 'subscription_id',
+    plan: 'plan_type',
+    status: 'status',
+    entitlementEndsAt: 'entitlement_ends_at'
+  };
+
+  for (const [inputKey, column] of Object.entries(fieldMap)) {
+    if (Object.prototype.hasOwnProperty.call(subscriptionData, inputKey)) {
+      payload[column] = subscriptionData[inputKey];
+    }
+  }
+
+  const existing = await supabaseAdmin
+    .from('user_profiles')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existing.error) {
+    console.error('Error checking subscription profile:', existing.error.message);
+    return { data: null, error: existing.error };
+  }
+
+  let result;
+
+  if (existing.data) {
+    result = await supabaseAdmin
+      .from('user_profiles')
+      .update(payload)
+      .eq('user_id', userId)
+      .select('*')
+      .maybeSingle();
+  } else {
+    result = await supabaseAdmin
+      .from('user_profiles')
+      .insert({
+        user_id: userId,
+        plan_type: 'free',
+        status: 'inactive',
+        ...payload
+      })
+      .select('*')
+      .maybeSingle();
+  }
+
+  if (result.error) {
+    console.error('Error updating subscription profile:', result.error.message);
+  }
+
+  return result;
 }
 
 module.exports = { supabaseAdmin, getUserProfile, updateUserSubscription };

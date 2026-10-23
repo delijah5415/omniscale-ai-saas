@@ -29,8 +29,13 @@ export default function AuthPanel({ onAuthChange }) {
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
         const currentUser = session?.user ?? null;
+        if (event === 'PASSWORD_RECOVERY') {
+          setMode('update-password');
+          setError('');
+          setMessage('Choose a new password for your account.');
+        }
         setUser(currentUser);
         onAuthChange?.(currentUser, session);
       }
@@ -54,27 +59,44 @@ export default function AuthPanel({ onAuthChange }) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (!normalizedEmail || !password) {
-      setError('Enter your email address and password.');
+    if (mode !== 'update-password' && !normalizedEmail) {
+      setError('Enter your email address.');
       return;
     }
 
-    if (mode === 'signup') {
-      if (password.length < 8) {
-        setError('Use a password with at least 8 characters.');
-        return;
-      }
+    if (!['forgot-password', 'update-password'].includes(mode) && !password) {
+      setError('Enter your password.');
+      return;
+    }
 
-      if (password !== confirmPassword) {
-        setError('The passwords do not match.');
-        return;
-      }
+    if (['signup', 'update-password'].includes(mode) && password.length < 8) {
+      setError('Use a password with at least 8 characters.');
+      return;
+    }
+
+    if (['signup', 'update-password'].includes(mode) && password !== confirmPassword) {
+      setError('The passwords do not match.');
+      return;
     }
 
     setLoading(true);
 
     try {
-      if (mode === 'signup') {
+      if (mode === 'forgot-password') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+          normalizedEmail,
+          { redirectTo: window.location.origin }
+        );
+        if (resetError) throw resetError;
+        setMessage('If an account exists for that email, a reset link will be sent. Check your inbox and spam folder.');
+      } else if (mode === 'update-password') {
+        const { error: updateError } = await supabase.auth.updateUser({ password });
+        if (updateError) throw updateError;
+        setPassword('');
+        setConfirmPassword('');
+        setMode('login');
+        setMessage('Your password has been updated successfully.');
+      } else if (mode === 'signup') {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: normalizedEmail,
           password,
@@ -163,7 +185,7 @@ export default function AuthPanel({ onAuthChange }) {
         {user ? 'Your OmniScale Account' : 'Create Your Account or Sign In'}
       </h3>
 
-      {user ? (
+      {user && mode !== 'update-password' ? (
         <div className="mt-4">
           <p className="text-sm text-slate-300">
             Signed in as <strong>{user.email || user.user_metadata?.email || 'Discord User'}</strong>
@@ -182,6 +204,8 @@ export default function AuthPanel({ onAuthChange }) {
         </div>
       ) : (
         <>
+          {!['forgot-password', 'update-password'].includes(mode) && (
+            <>
           {/* Discord OAuth Login Button */}
           <div className="mt-5">
             <button
@@ -240,41 +264,72 @@ export default function AuthPanel({ onAuthChange }) {
             </button>
           </div>
 
+            </>
+          )}
+
+          {mode === 'login' && (
+            <div className="mt-3 text-right">
+              <button type="button" onClick={() => {
+                setMode('forgot-password');
+                setError('');
+                setMessage('');
+                setPassword('');
+                setConfirmPassword('');
+              }} className="text-sm text-indigo-400 underline">
+                Forgot password?
+              </button>
+            </div>
+          )}
+
+          {(mode === 'forgot-password' || mode === 'update-password') && (
+            <div className="mt-3">
+              <button type="button" onClick={() => {
+                setMode('login');
+                setError('');
+                setMessage('');
+                setPassword('');
+                setConfirmPassword('');
+              }} className="text-sm text-indigo-400 underline">
+                Back to sign in
+              </button>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">
-                Email address
-              </label>
-              <input
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
-                placeholder="you@example.com"
-              />
-            </div>
+            {mode !== 'update-password' && (
+              <div>
+                <label className="mb-2 block text-sm text-slate-300">Email address</label>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
+                  placeholder="you@example.com"
+                />
+              </div>
+            )}
 
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">
-                Password
-              </label>
-              <input
-                type="password"
-                autoComplete={
-                  mode === 'signup' ? 'new-password' : 'current-password'
-                }
-                minLength={8}
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
-                placeholder="At least 8 characters"
-              />
-            </div>
+            {mode !== 'forgot-password' && (
+              <div>
+                <label className="mb-2 block text-sm text-slate-300">
+                  {mode === 'update-password' ? 'New password' : 'Password'}
+                </label>
+                <input
+                  type="password"
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  minLength={8}
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
+                  placeholder="At least 8 characters"
+                />
+              </div>
+            )}
 
-            {mode === 'signup' && (
+            {(mode === 'signup' || mode === 'update-password') && (
               <div>
                 <label className="mb-2 block text-sm text-slate-300">
                   Confirm password
@@ -338,7 +393,11 @@ export default function AuthPanel({ onAuthChange }) {
                 ? 'Please wait...'
                 : mode === 'signup'
                   ? 'Create Account'
-                  : 'Sign In'}
+                  : mode === 'forgot-password'
+                    ? 'Send Reset Link'
+                    : mode === 'update-password'
+                      ? 'Update Password'
+                      : 'Sign In'}
             </button>
           </form>
         </>
