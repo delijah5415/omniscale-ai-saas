@@ -1,6 +1,7 @@
 import TermsAndConditionsModal from "./components/TermsAndConditionsModal.jsx";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AuthPanel from './components/AuthPanel.jsx';
+import PremiumWorkspace from './components/PremiumWorkspace.jsx';
 import AccountDashboard from './components/AccountDashboard';
 import VideoAdBanner from './components/VideoAdBanner'; // Added local video advertisement component
 import { supabase } from './lib/supabase.js';
@@ -519,6 +520,16 @@ export default function App() {
             >
               AI Automation
             </button>
+            <button
+              onClick={() => setActiveTab('workspace')}
+              className={`px-5 py-3 rounded-xl font-semibold transition ${
+                activeTab === 'workspace'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-slate-900 border border-slate-800 text-slate-300'
+              }`}
+            >
+              AI Workspace
+            </button>
           </div>
           {activeTab === 'builder' && (
             <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8">
@@ -615,6 +626,12 @@ export default function App() {
                 </div>
               )}
             </section>
+          )}
+          {activeTab === 'workspace' && (
+            <PremiumWorkspace
+              accessToken={accessToken}
+              isAuthenticated={isAuthenticated}
+            />
           )}
         </main>
       </div>

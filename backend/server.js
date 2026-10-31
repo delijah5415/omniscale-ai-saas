@@ -60,16 +60,28 @@ const buildRateLimit = rateLimit({
   message: { success: false, error: 'Build request limit reached. Try again later.' }
 });
 
+const workspaceChatRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: req => req.method === 'OPTIONS',
+  message: { success: false, error: 'AI Workspace request limit reached. Try again later.' }
+});
+
+app.use('/api/ai-workspace/chat', workspaceChatRateLimit);
 app.use('/api', apiRateLimit);
 app.use('/api/ai/generate', aiRateLimit);
 app.use('/api/builder/build-platform', buildRateLimit);
 
 
 const aiRoutes = require('./routes/ai');
+const aiWorkspaceRoutes = require('./routes/aiWorkspace');
 const builderRoutes = require('./routes/builder');
 const accountRoutes = require('./routes/account');
 
 app.use('/api/ai', aiRoutes);
+app.use('/api/ai-workspace', aiWorkspaceRoutes);
 app.use('/api/builder', builderRoutes);
 app.use('/api/account', accountRoutes);
 const messagesRouter = require('./routes/messages');
