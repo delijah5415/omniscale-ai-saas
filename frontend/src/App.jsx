@@ -530,6 +530,16 @@ export default function App() {
             >
               AI Workspace
             </button>
+            <button
+              onClick={() => setActiveTab('account')}
+              className={`px-5 py-3 rounded-xl font-semibold transition ${
+                activeTab === 'account'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-slate-900 border border-slate-800 text-slate-300'
+              }`}
+            >
+              Account
+            </button>
           </div>
           {activeTab === 'builder' && (
             <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8">
@@ -631,6 +641,12 @@ export default function App() {
             <PremiumWorkspace
               accessToken={accessToken}
               isAuthenticated={isAuthenticated}
+            />
+          )}
+          {activeTab === 'account' && (
+            <AccountDashboard
+              accessToken={accessToken}
+              onSignOut={logout}
             />
           )}
         </main>
@@ -787,7 +803,7 @@ export default function App() {
           </div>
           <AuthPanel onAuthChange={handleSupabaseAuthChange} />
           {isAuthenticated && accessToken && (
-            <AccountDashboard accessToken={accessToken} />
+            <AccountDashboard accessToken={accessToken} onSignOut={logout} />
           )}
         </section>
         <section id="pricing" className="max-w-5xl mx-auto px-6 py-20">

@@ -140,6 +140,20 @@ router.get('/me', requireAuth, async (req, res) => {
       success: true,
       account: {
         email: req.user.email || '',
+        fullName: (
+          typeof req.user.user_metadata?.full_name === 'string'
+            ? req.user.user_metadata.full_name
+            : typeof req.user.user_metadata?.name === 'string'
+              ? req.user.user_metadata.name
+              : ''
+        ),
+        emailConfirmed: Boolean(
+          req.user.email_confirmed_at || req.user.confirmed_at
+        ),
+        emailConfirmedAt:
+          req.user.email_confirmed_at || req.user.confirmed_at || null,
+        createdAt: req.user.created_at || null,
+        lastSignInAt: req.user.last_sign_in_at || null,
         plan: profile?.plan_type || null,
         status: profile?.status || 'no_subscription',
         updatedAt: profile?.updated_at || null,
