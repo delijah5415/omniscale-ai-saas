@@ -1,10 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const { rateLimit } = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
+
+// Trust the single Vercel proxy hop.
+app.set('trust proxy', 1);
+
+// Use Express's resolved client IP for IPv6-safe rate-limit keys.
+const omniscaleIpKeyGenerator = req => ipKeyGenerator(req.ip);
 
 const PORT = process.env.PORT || 5000;
 
@@ -34,6 +40,7 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 const apiRateLimit = rateLimit({
+  keyGenerator: omniscaleIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 120,
   standardHeaders: 'draft-8',
@@ -43,6 +50,7 @@ const apiRateLimit = rateLimit({
 });
 
 const aiRateLimit = rateLimit({
+  keyGenerator: omniscaleIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: 'draft-8',
@@ -52,6 +60,7 @@ const aiRateLimit = rateLimit({
 });
 
 const buildRateLimit = rateLimit({
+  keyGenerator: omniscaleIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: 'draft-8',
@@ -61,6 +70,7 @@ const buildRateLimit = rateLimit({
 });
 
 const workspaceChatRateLimit = rateLimit({
+  keyGenerator: omniscaleIpKeyGenerator,
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: 'draft-8',
