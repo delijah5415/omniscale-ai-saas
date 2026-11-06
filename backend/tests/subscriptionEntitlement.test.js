@@ -43,3 +43,26 @@ test('cancelled pending review preserves access when paid-through date is unknow
   assert.equal(result.hasAccess, true);
   assert.equal(result.requiresReview, true);
 });
+
+test('complimentary entitlement grants access without a PayPal subscription', () => {
+  const result = getSubscriptionEntitlement({
+    status: 'complimentary',
+    entitlement_ends_at: null,
+    subscription_id: null
+  });
+
+  assert.equal(result.hasAccess, true);
+  assert.equal(result.status, 'complimentary');
+  assert.equal(result.requiresReview, false);
+  assert.equal(result.entitlementEndsAt, null);
+});
+
+test('expired complimentary entitlement does not grant access', () => {
+  const result = getSubscriptionEntitlement({
+    status: 'complimentary',
+    entitlement_ends_at: '2026-10-22T00:00:00.000Z'
+  }, new Date('2026-10-23T09:00:00.000Z'));
+
+  assert.equal(result.hasAccess, false);
+  assert.equal(result.status, 'expired');
+});

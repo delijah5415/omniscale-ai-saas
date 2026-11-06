@@ -19,6 +19,16 @@ function getSubscriptionEntitlement(profile, now = new Date()) {
     };
   }
 
+  // Administrator-granted complimentary access is separate from PayPal billing.
+  if (status === 'complimentary') {
+    return {
+      hasAccess: true,
+      status: 'complimentary',
+      entitlementEndsAt,
+      requiresReview: false
+    };
+  }
+
   if (status === 'active') {
     return {
       hasAccess: true,
