@@ -145,10 +145,18 @@ export default function AuthPanel({ onAuthChange }) {
     setLoading(true);
 
     try {
+      const isLocalDevelopment =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+
+      const oauthRedirectUrl = isLocalDevelopment
+        ? window.location.origin
+        : 'https://omniscale-ai-saas.vercel.app';
+
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'discord',
         options: {
-          redirectTo: window.location.origin
+          redirectTo: oauthRedirectUrl
         }
       });
 

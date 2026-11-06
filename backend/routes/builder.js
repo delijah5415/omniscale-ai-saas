@@ -184,26 +184,323 @@ router.get('/subscription-status', requireAuth, async (req, res) => {
 });
 
 router.post('/build-platform', requireAuth, async (req, res) => {
+  const stages = [];
+  const addStage = (name, status, detail) => {
+    stages.push({ name, status, detail, timestamp: new Date().toISOString() });
+  };
+  const routeError = (statusCode, message) =>
+    Object.assign(new Error(message), { statusCode });
+
   try {
+    const platformPrompt = req.body?.platformPrompt;
+    const preferences = req.body?.preferences ?? {};
+
+    if (typeof platformPrompt !== 'string' || !platformPrompt.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Platform prompt is required.'
+      });
+    }
+
+    if (platformPrompt.length > 12000) {
+      return res.status(400).json({
+        success: false,
+        error: 'Platform prompt must not exceed 12,000 characters.'
+      });
+    }
+
+    if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Preferences must be a valid object.'
+      });
+    }
+
+    addStage('Request validation', 'completed', 'Project request validated.');
+
     const profile = await getUserProfile(req.user.id);
+
     if (!getSubscriptionEntitlement(profile).hasAccess) {
-      return res.status(403).json({ success: false, error: 'Active subscription required to access Platform Builder.' });
+      return res.status(403).json({
+        success: false,
+        error: 'Active subscription required to access Platform Builder.'
+      });
     }
 
-    const { platformPrompt } = req.body;
-    if (!platformPrompt || !platformPrompt.trim()) {
-      return res.status(400).json({ success: false, error: 'Platform prompt is required.' });
+    addStage('Access verification', 'completed', 'Subscription entitlement verified.');
+
+    const preferenceLimits = {
+      framework: 80,
+      language: 40,
+      styling: 80,
+      database: 80,
+      authentication: 80,
+      additionalFeatures: 2000
+    };
+
+    const defaults = {
+      framework: 'React + Vite',
+      language: 'JavaScript',
+      styling: 'Tailwind CSS',
+      database: 'Supabase',
+      authentication: 'Supabase Auth',
+      additionalFeatures: ''
+    };
+
+    const safePreferences = {};
+
+    for (const [key, limit] of Object.entries(preferenceLimits)) {
+      const value = preferences[key];
+
+      if (value !== undefined && typeof value !== 'string') {
+        throw routeError(400, 'Preference "' + key + '" must be text.');
+      }
+
+      const normalized = value === undefined ? defaults[key] : value.trim();
+
+      if (normalized.length > limit) {
+        throw routeError(400, 'Preference "' + key + '" exceeds its character limit.');
+      }
+
+      safePreferences[key] = normalized || defaults[key];
     }
 
-    const result = await generateText({
-      instructions: 'You are OmniScale AI software architecture assistant. Create full platform technical specifications.',
-      input: platformPrompt.trim()
+    addStage('AI generation', 'running', 'Request submitted to the configured AI model.');
+
+    let raw;
+
+    try {
+      raw = await generateText({
+        instructions: [
+          'You are OmniScale AI, a senior full-stack software engineer.',
+          'Generate a practical starter application, not merely a technical essay.',
+          'Return ONLY valid JSON without Markdown fences.',
+          'Required shape: {"projectName":"...","summary":"...","architecture":"...","files":[{"path":"relative/path","content":"complete file contents"}],"previewHtml":"standalone HTML preview","buildCommands":["command"]}.',
+          'Generate 5 to 15 useful, coherent application files, including framework entry files. Do not generate root README.md, preview.html, or omniscale-project-manifest.json because the ZIP exporter creates those files.',
+          'Match all selected preferences. Never include real credentials, secrets, or private keys.',
+          'Use placeholders in .env.example only.',
+          'Preview HTML must be self-contained and must not load external scripts.',
+          'Never claim the project has been compiled, tested, or deployed.',
+          'Build commands are suggestions only and must never be executed by this server.'
+        ].join(' '),
+        input: JSON.stringify({
+          request: platformPrompt.trim(),
+          preferences: safePreferences
+        })
+      });
+    } catch (error) {
+      console.error('Platform AI generation request failed:', {
+        name: error?.name,
+        status: error?.status,
+        code: error?.code
+      });
+
+      throw routeError(502, 'The AI generation service is temporarily unavailable. Please retry.');
+    }
+
+    if (typeof raw !== 'string' || !raw.trim() || raw.length > 750000) {
+      throw routeError(502, 'AI returned an empty or oversized project response. Please retry.');
+    }
+
+    addStage('AI generation', 'completed', 'AI response received.');
+
+    let project;
+
+    try {
+      let cleaned = raw.trim();
+      const fence = String.fromCharCode(96).repeat(3);
+
+      if (cleaned.startsWith(fence)) {
+        cleaned = cleaned.split('\n').slice(1).join('\n');
+
+        if (cleaned.trimEnd().endsWith(fence)) {
+          cleaned = cleaned.trimEnd().slice(0, -fence.length);
+        }
+      }
+
+      project = JSON.parse(cleaned.trim());
+    } catch {
+      throw routeError(502, 'AI returned an invalid project manifest. Please retry generation.');
+    }
+
+    if (!project || typeof project !== 'object' || Array.isArray(project)) {
+      throw routeError(502, 'AI returned an invalid project manifest.');
+    }
+
+    if (!Array.isArray(project.files) ||
+        project.files.length < 1 ||
+        project.files.length > 30) {
+      throw routeError(502, 'AI project manifest is incomplete or exceeds the file limit.');
+    }
+
+    if (project.projectName !== undefined &&
+        typeof project.projectName !== 'string') {
+      throw routeError(502, 'AI returned an invalid project name.');
+    }
+
+    if (project.summary !== undefined &&
+        typeof project.summary !== 'string') {
+      throw routeError(502, 'AI returned an invalid project summary.');
+    }
+
+    const forbiddenNames = new Set([
+      '.env', '.git', 'node_modules', '.vercel', '.ssh'
+    ]);
+
+    const isProtectedEnvFile = (name) => {
+      const lowerName = name.toLowerCase();
+      return lowerName === '.env' ||
+        (lowerName.startsWith('.env.') && lowerName !== '.env.example');
+    };
+
+    const reservedWindowsName =
+      /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\..*)?$/i;
+
+    const invalidPathCharacters = /[<>:"|?*\x00-\x1f]/;
+
+    const reservedRootFiles = new Set([
+      'preview.html',
+      'readme.md',
+      'omniscale-project-manifest.json'
+    ]);
+
+    let totalBytes = 0;
+    const seenPaths = new Set();
+
+    const files = project.files.map((item) => {
+      if (!item || typeof item.path !== 'string' ||
+          typeof item.content !== 'string') {
+        throw routeError(502, 'A generated project file has an invalid format.');
+      }
+
+      const filePath = item.path;
+      const segments = filePath.split('/');
+
+      if (!filePath || filePath.length > 180 ||
+          filePath !== filePath.trim() ||
+          filePath.startsWith('/') ||
+          filePath.includes('\\') ||
+          segments.some((part) =>
+            !part ||
+            part === '.' ||
+            part === '..' ||
+            part !== part.trim() ||
+            /[. ]$/.test(part) ||
+            invalidPathCharacters.test(part) ||
+            forbiddenNames.has(part.toLowerCase()) ||
+            isProtectedEnvFile(part) ||
+            reservedWindowsName.test(part)
+          )) {
+        throw routeError(502, 'A generated project file contains an unsafe path.');
+      }
+
+      if (segments.length === 1 &&
+          reservedRootFiles.has(filePath.toLowerCase())) {
+        throw routeError(502, 'A generated project file uses a reserved ZIP filename.');
+      }
+
+      const normalizedPath = filePath.toLowerCase();
+
+      if (seenPaths.has(normalizedPath)) {
+        throw routeError(502, 'Generated project contains duplicate file paths.');
+      }
+
+      if ([...seenPaths].some((existingPath) =>
+        existingPath.startsWith(normalizedPath + '/') ||
+        normalizedPath.startsWith(existingPath + '/')
+      )) {
+        throw routeError(502, 'Generated project contains conflicting file and directory paths.');
+      }
+
+      seenPaths.add(normalizedPath);
+
+      const bytes = Buffer.byteLength(item.content, 'utf8');
+
+      if (bytes > 80000) {
+        throw routeError(502, 'A generated project file exceeds 80 KB.');
+      }
+
+      totalBytes += bytes;
+
+      if (totalBytes > 500000) {
+        throw routeError(502, 'Generated project exceeds 500 KB.');
+      }
+
+      return { path: filePath, content: item.content };
     });
 
-    res.json({ success: true, result, timestamp: new Date().toISOString() });
+    if (typeof project.previewHtml !== 'string' ||
+        !project.previewHtml.trim() ||
+        project.previewHtml.length > 150000) {
+      throw routeError(502, 'Generated project preview is missing or too large.');
+    }
+
+    if (project.architecture !== undefined &&
+        typeof project.architecture !== 'string' &&
+        (!project.architecture ||
+         typeof project.architecture !== 'object' ||
+         Array.isArray(project.architecture))) {
+      throw routeError(502, 'AI returned invalid architecture information.');
+    }
+
+    const architecture = typeof project.architecture === 'string'
+      ? project.architecture
+      : JSON.stringify(project.architecture ?? '');
+
+    if (architecture.length > 5000) {
+      throw routeError(502, 'Generated architecture information is too large.');
+    }
+
+    if (project.buildCommands !== undefined &&
+        !Array.isArray(project.buildCommands)) {
+      throw routeError(502, 'AI returned invalid build commands.');
+    }
+
+    const buildCommands = (project.buildCommands || []).map((command) => {
+      if (typeof command !== 'string') {
+        throw routeError(502, 'A generated build command has an invalid format.');
+      }
+
+      return command.slice(0, 300);
+    }).slice(0, 20);
+
+    const safeProject = {
+      projectName: (project.projectName || 'OmniScale Project').slice(0, 100),
+      summary: (project.summary || '').slice(0, 3000),
+      architecture,
+      preferences: safePreferences,
+      files,
+      previewHtml: project.previewHtml,
+      buildCommands
+    };
+
+    addStage('Manifest parsing', 'completed', 'Structured project response parsed.');
+    addStage('File validation', 'completed', files.length + ' files passed validation.');
+    addStage('Project preparation', 'completed', 'Project files and preview are ready.');
+
+    return res.json({
+      success: true,
+      project: safeProject,
+      result: safeProject.summary,
+      stages,
+      timestamp: new Date().toISOString()
+    });
   } catch (err) {
-    console.error('Platform generation error:', err);
-    res.status(500).json({ success: false, error: 'Platform generation failed.' });
+    console.error('Platform generation error:', {
+      name: err?.name,
+      statusCode: err?.statusCode,
+      message: err?.statusCode ? err.message : 'Internal generation error'
+    });
+
+    addStage('Generation', 'failed', 'Project generation could not be completed.');
+
+    return res.status(err?.statusCode || 500).json({
+      success: false,
+      error: err?.statusCode
+        ? err.message
+        : 'Project generation failed. Please try again.',
+      stages
+    });
   }
 });
 

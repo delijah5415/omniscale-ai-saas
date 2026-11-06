@@ -2,6 +2,7 @@ import TermsAndConditionsModal from "./components/TermsAndConditionsModal.jsx";
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AuthPanel from './components/AuthPanel.jsx';
 import PremiumWorkspace from './components/PremiumWorkspace.jsx';
+import PlatformBuilder from './components/PlatformBuilder.jsx';
 import AccountDashboard from './components/AccountDashboard';
 import VideoAdBanner from './components/VideoAdBanner'; // Added local video advertisement component
 import { supabase } from './lib/supabase.js';
@@ -78,38 +79,46 @@ export default function App() {
   const [showLegal, setShowLegal] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const verificationInProgress = useRef(false);
+  const authCheckGeneration = useRef(0);
 
   const handleSupabaseAuthChange = useCallback(async (user, session) => {
+    const generation = ++authCheckGeneration.current;
     const token = session?.access_token || '';
 
     setAccessToken(token);
     setIsAuthenticated(Boolean(user && token));
+    // Never carry a previous user's paid-access state into a new auth session.
+    setSubscriptionStatus('unknown');
 
     if (user?.email) {
       setPaymentEmail(user.email);
     }
 
-    if (user && token) {
-      try {
-        const res = await fetch(`${API_URL}/builder/subscription-status`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = await res.json();
+    if (!user || !token) {
+      return;
+    }
 
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Subscription status could not be verified.');
-        }
+    try {
+      const res = await fetch(`${API_URL}/builder/subscription-status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
 
-        setSubscriptionStatus(
-          data.hasAccess === true
-            ? 'active'
-            : 'inactive'
-        );
-      } catch (err) {
-        console.error('Subscription verification failed:', err);
-        setSubscriptionStatus('unknown');
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Subscription status could not be verified.');
       }
-    } else {
+
+      if (generation !== authCheckGeneration.current) {
+        return;
+      }
+
+      setSubscriptionStatus(data.hasAccess === true ? 'active' : 'inactive');
+    } catch (err) {
+      if (generation !== authCheckGeneration.current) {
+        return;
+      }
+
+      console.error('Subscription verification failed:', err);
       setSubscriptionStatus('unknown');
     }
   }, []);
@@ -388,7 +397,7 @@ export default function App() {
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Supabase sign-out failed:', error.message);
-      return;
+      throw error;
     }
 
     window.localStorage.removeItem(ACCESS_TOKEN_KEY);
@@ -542,36 +551,10 @@ export default function App() {
             </button>
           </div>
           {activeTab === 'builder' && (
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8">
-              <h2 className="text-2xl font-bold">No-Code Platform Builder</h2>
-              <p className="text-slate-400 mt-2 mb-6">
-                Describe the digital platform you want OmniScale to architect.
-              </p>
-              <form onSubmit={handleBuildPlatform}>
-                <textarea
-                  value={platformPrompt}
-                  onChange={(event) => setPlatformPrompt(event.target.value)}
-                  rows={8}
-                  placeholder="Example: Build an online booking platform for pet groomers with customer accounts, appointments, payments, notifications and an admin dashboard."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-sm focus:outline-none focus:border-sky-500 resize-y"
-                />
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-4 px-6 py-3 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-500 font-bold disabled:opacity-50"
-                >
-                  {loading ? 'Generating Platform...' : 'Generate Platform Specification'}
-                </button>
-              </form>
-              {buildOutput && (
-                <div className="mt-6 bg-slate-950 border border-slate-800 rounded-xl p-5">
-                  <h3 className="font-bold mb-3">Generated Result</h3>
-                  <pre className="whitespace-pre-wrap text-sm text-slate-300 leading-7">
-                    {buildOutput}
-                  </pre>
-                </div>
-              )}
-            </section>
+            <PlatformBuilder
+              accessToken={accessToken}
+              subscriptionStatus={subscriptionStatus}
+            />
           )}
           {activeTab === 'ai' && (
             <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8">
