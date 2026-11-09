@@ -89,11 +89,13 @@ const aiRoutes = require('./routes/ai');
 const aiWorkspaceRoutes = require('./routes/aiWorkspace');
 const builderRoutes = require('./routes/builder');
 const accountRoutes = require('./routes/account');
+const blockedEmailsRoutes = require('./routes/blockedEmails');
 
 app.use('/api/ai', aiRoutes);
 app.use('/api/ai-workspace', aiWorkspaceRoutes);
 app.use('/api/builder', builderRoutes);
 app.use('/api/account', accountRoutes);
+app.use('/api/admin', blockedEmailsRoutes);
 const messagesRouter = require('./routes/messages');
 app.use('/api/messages', messagesRouter);
 

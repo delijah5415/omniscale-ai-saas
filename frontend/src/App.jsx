@@ -493,10 +493,22 @@ export default function App() {
             </div>
           </div>
         </nav>
-        <main className="max-w-7xl mx-auto px-6 py-10">
-          {/* Embedded Video Advertisement with Local Storage tracking */}
-          <VideoAdBanner />
-
+        <main className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+          <div className="grid min-w-0 gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
+            <aside className="hidden lg:block">
+              <div className="sticky top-24 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+                <p className="px-3 pb-3 text-xs font-bold uppercase tracking-wider text-slate-500">Workspace</p>
+                <nav aria-label="Workspace navigation" className="space-y-1">
+                  <button type="button" onClick={() => setActiveTab("builder")} className={"w-full rounded-xl px-3 py-3 text-left text-sm font-semibold transition " + (activeTab === "builder" ? "bg-sky-500/15 text-sky-200" : "text-slate-300 hover:bg-slate-800")}>⌘ Platform Builder</button>
+                  <button type="button" onClick={() => setActiveTab("ai")} className={"w-full rounded-xl px-3 py-3 text-left text-sm font-semibold transition " + (activeTab === "ai" ? "bg-sky-500/15 text-sky-200" : "text-slate-300 hover:bg-slate-800")}>✧ AI Automation</button>
+                  <button type="button" onClick={() => setActiveTab("workspace")} className={"w-full rounded-xl px-3 py-3 text-left text-sm font-semibold transition " + (activeTab === "workspace" ? "bg-sky-500/15 text-sky-200" : "text-slate-300 hover:bg-slate-800")}>▤ AI Workspace</button>
+                  <button type="button" onClick={() => setActiveTab("account")} className={"w-full rounded-xl px-3 py-3 text-left text-sm font-semibold transition " + (activeTab === "account" ? "bg-sky-500/15 text-sky-200" : "text-slate-300 hover:bg-slate-800")}>◎ Account</button>
+                </nav>
+                <div className="mt-5 border-t border-slate-800 pt-4 text-xs text-emerald-300">Access verified</div>
+              </div>
+            </aside>
+            <div className="min-w-0">
+              <VideoAdBanner />
           <section className="mb-8">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
               ✓ Payment Verified & Authenticated
@@ -508,48 +520,18 @@ export default function App() {
               Build digital platforms and run AI-powered automation workflows from one workspace.
             </p>
           </section>
-          <div className="flex flex-wrap gap-3 mb-8">
-            <button
-              onClick={() => setActiveTab('builder')}
-              className={`px-5 py-3 rounded-xl font-semibold transition ${
-                activeTab === 'builder'
-                  ? 'bg-sky-500 text-white'
-                  : 'bg-slate-900 border border-slate-800 text-slate-300'
-              }`}
-            >
-              Platform Builder
-            </button>
-            <button
-              onClick={() => setActiveTab('ai')}
-              className={`px-5 py-3 rounded-xl font-semibold transition ${
-                activeTab === 'ai'
-                  ? 'bg-indigo-500 text-white'
-                  : 'bg-slate-900 border border-slate-800 text-slate-300'
-              }`}
-            >
-              AI Automation
-            </button>
-            <button
-              onClick={() => setActiveTab('workspace')}
-              className={`px-5 py-3 rounded-xl font-semibold transition ${
-                activeTab === 'workspace'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-slate-900 border border-slate-800 text-slate-300'
-              }`}
-            >
-              AI Workspace
-            </button>
-            <button
-              onClick={() => setActiveTab('account')}
-              className={`px-5 py-3 rounded-xl font-semibold transition ${
-                activeTab === 'account'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-slate-900 border border-slate-800 text-slate-300'
-              }`}
-            >
-              Account
-            </button>
-          </div>
+          <nav aria-label="Workspace navigation" className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/80 p-2 lg:hidden">
+            {[
+              { id: "builder", label: "Builder" },
+              { id: "ai", label: "AI Automation" },
+              { id: "workspace", label: "AI Workspace" },
+              { id: "account", label: "Account" },
+            ].map((item) => (
+              <button key={item.id} type="button" onClick={() => setActiveTab(item.id)} className={"shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold " + (activeTab === item.id ? "bg-sky-500 text-white" : "text-slate-400 hover:bg-slate-800")}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
           {activeTab === 'builder' && (
             <PlatformBuilder
               accessToken={accessToken}
@@ -632,6 +614,8 @@ export default function App() {
               onSignOut={logout}
             />
           )}
+            </div>
+          </div>
         </main>
       </div>
     );
@@ -672,9 +656,39 @@ export default function App() {
           <div className="relative max-w-7xl mx-auto px-6 py-24 md:py-32">
             <div className="max-w-4xl">
               {/* Embedded Video Advertisement Banner on Landing Page */}
-              <div className="mb-10">
+              <div className="mb-6">
                 <VideoAdBanner />
               </div>
+
+              <details className="mb-10 max-w-3xl rounded-xl border border-slate-700 bg-slate-900/80 text-left">
+                <summary className="cursor-pointer list-none px-5 py-4 text-sm font-semibold text-sky-300 marker:hidden">
+                  How to use OmniScale AI — website guide
+                  <span className="float-right text-slate-400">＋</span>
+                </summary>
+                <div className="border-t border-slate-800 px-5 py-4 text-sm text-slate-300">
+                  <ol className="list-decimal space-y-3 pl-5">
+                    <li>
+                      <a href="#features" className="font-semibold text-sky-300 underline">Explore Platform</a>
+                      {' '}to review the six AI automation services and platform-generation tools.
+                    </li>
+                    <li>
+                      <a href="#how-it-works" className="font-semibold text-sky-300 underline">How It Works</a>
+                      {' '}explains the account, subscription, verification, and workflow sequence.
+                    </li>
+                    <li>
+                      <a href="#account" className="font-semibold text-sky-300 underline">Create an account</a>
+                      {' '}using your email and password. Accept the Terms of Service and Privacy Policy to register. Phone number is optional.
+                    </li>
+                    <li>
+                      <a href="#pricing" className="font-semibold text-sky-300 underline">Choose a subscription</a>
+                      {' '}and complete checkout. Paid workspace access is enabled only after the subscription is verified.
+                    </li>
+                    <li>
+                      Once access is active, open the workspace to use the AI services and Platform Builder. The Builder's activity console is available to authenticated subscribers with verified active access; it displays build activity and does not execute shell commands.
+                    </li>
+                  </ol>
+                </div>
+              </details>
 
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400 text-xs font-bold uppercase tracking-wider">
                 AI Automation • No-Code Development • Digital Platforms

@@ -1,5 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase.js';
+import {
+  getCountries,
+  getCountryCallingCode,
+  parsePhoneNumberFromString
+} from 'libphonenumber-js';
+
+const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+const regionNames = typeof Intl.DisplayNames === 'function'
+  ? new Intl.DisplayNames(['en'], { type: 'region' })
+  : null;
+
+const PHONE_COUNTRIES = getCountries()
+  .map(country => ({
+    country,
+    name: regionNames?.of(country) || country,
+    callingCode: getCountryCallingCode(country)
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+async function syncPhoneProfile(session) {
+  const phone = session?.user?.user_metadata?.phone;
+  if (!phone) return;
+
+  const response = await fetch(API_URL + '/account/sync-phone', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + session.access_token,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('Phone profile sync could not be completed.');
+  }
+}
 
 export default function AuthPanel({ onAuthChange }) {
   const [mode, setMode] = useState('signup');
@@ -11,6 +46,8 @@ export default function AuthPanel({ onAuthChange }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [phoneCountry, setPhoneCountry] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -79,6 +116,27 @@ export default function AuthPanel({ onAuthChange }) {
       return;
     }
 
+    let phoneE164 = '';
+    if (mode === 'signup' && phoneInput.trim()) {
+      const rawPhone = phoneInput.trim();
+      const parsedPhone = rawPhone.startsWith('+')
+        ? parsePhoneNumberFromString(rawPhone)
+        : phoneCountry
+          ? parsePhoneNumberFromString(rawPhone, phoneCountry)
+          : null;
+
+      if (!parsedPhone || !parsedPhone.isValid()) {
+        setError(
+          rawPhone.startsWith('+')
+            ? 'Enter a valid international phone number.'
+            : 'Select a country calling code and enter a valid phone number.'
+        );
+        return;
+      }
+
+      phoneE164 = parsedPhone.number;
+    }
+
     setLoading(true);
 
     try {
@@ -97,25 +155,40 @@ export default function AuthPanel({ onAuthChange }) {
         setMode('login');
         setMessage('Your password has been updated successfully.');
       } else if (mode === 'signup') {
+        const signupOptions = {
+          emailRedirectTo: window.location.origin
+        };
+
+        if (phoneE164) {
+          signupOptions.data = { phone: phoneE164 };
+        }
+
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: normalizedEmail,
           password,
-          options: {
-            emailRedirectTo: window.location.origin
-          }
+          options: signupOptions
         });
 
         if (signUpError) throw signUpError;
 
         if (data.session) {
-          setMessage('Account created and signed in successfully.');
+          let syncWarning = '';
+          if (phoneE164) {
+            try {
+              await syncPhoneProfile(data.session);
+            } catch (syncError) {
+              console.error('Phone profile sync failed:', syncError.message);
+              syncWarning = ' Phone details will be retried after your next sign-in.';
+            }
+          }
+          setMessage('Account created and signed in successfully.' + syncWarning);
         } else {
           setMessage(
             'Account registration received. Check your email for a verification link before signing in.'
           );
         }
       } else {
-        const { error: signInError } =
+        const { data, error: signInError } =
           await supabase.auth.signInWithPassword({
             email: normalizedEmail,
             password
@@ -123,7 +196,17 @@ export default function AuthPanel({ onAuthChange }) {
 
         if (signInError) throw signInError;
 
-        setMessage('Signed in successfully.');
+        let syncWarning = '';
+        if (data.session?.user?.user_metadata?.phone) {
+          try {
+            await syncPhoneProfile(data.session);
+          } catch (syncError) {
+            console.error('Phone profile sync failed:', syncError.message);
+            syncWarning = ' Phone profile sync could not complete; it can be retried later.';
+          }
+        }
+
+        setMessage('Signed in successfully.' + syncWarning);
       }
 
       setPassword('');
@@ -316,6 +399,40 @@ export default function AuthPanel({ onAuthChange }) {
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
                   placeholder="you@example.com"
                 />
+              </div>
+            )}
+
+            {mode === 'signup' && (
+              <div className="space-y-2">
+                <label htmlFor="signup-phone-country" className="block text-sm text-slate-300">
+                  Phone number <span className="text-slate-500">(optional)</span>
+                </label>
+                <select
+                  id="signup-phone-country"
+                  value={phoneCountry}
+                  onChange={event => setPhoneCountry(event.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
+                >
+                  <option value="">Select country calling code</option>
+                  {PHONE_COUNTRIES.map(item => (
+                    <option key={item.country} value={item.country}>
+                      {item.name} (+{item.callingCode})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={phoneInput}
+                  onChange={event => setPhoneInput(event.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-white"
+                  placeholder="+254 712 345 678 or local number"
+                  aria-describedby="signup-phone-help"
+                />
+                <p id="signup-phone-help" className="text-xs text-slate-500">
+                  Optional. Choose a country for local-format numbers, or enter a full international number beginning with +.
+                </p>
               </div>
             )}
 

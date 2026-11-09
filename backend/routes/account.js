@@ -132,6 +132,67 @@ async function cancelActiveSubscription(profile, userId) {
   return { providerStatus, entitlementEndsAt, requiresReview, localStatus };
 }
 
+router.post('/sync-phone', requireAuth, async (req, res) => {
+  try {
+    // Phone is read only from the authenticated Supabase user's metadata.
+    const phone = req.user.user_metadata?.phone;
+
+    if (typeof phone !== 'string' || !/^\+[1-9]\d{6,14}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid phone number in international format is available on this account.'
+      });
+    }
+
+    const { data: existingProfile, error: lookupError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('user_id')
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.error('Phone profile lookup failed:', lookupError.message);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to update phone profile.'
+      });
+    }
+
+    const profileQuery = existingProfile
+      ? supabaseAdmin
+          .from('user_profiles')
+          .update({ phone, updated_at: new Date().toISOString() })
+          .eq('user_id', req.user.id)
+      : supabaseAdmin
+          .from('user_profiles')
+          .insert({
+            user_id: req.user.id,
+            phone,
+            plan_type: 'free',
+            status: 'inactive',
+            updated_at: new Date().toISOString()
+          });
+
+    const { error: updateError } = await profileQuery;
+
+    if (updateError) {
+      console.error('Phone profile update failed:', updateError.message);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to update phone profile.'
+      });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Phone profile sync failed:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Unable to update phone profile.'
+    });
+  }
+});
+
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const profile = await getUserProfile(req.user.id);

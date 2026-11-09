@@ -570,21 +570,65 @@ export default function PlatformBuilder({ accessToken, subscriptionStatus }) {
             )}
 
             {activeTab === 'Terminal' && (
-              <div className="bg-black border border-slate-800 rounded-xl overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-                  <div className="flex gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-yellow-500"></span>
-                    <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span>
+              <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-950 shadow-2xl shadow-black/30">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-2" aria-hidden="true">
+                      <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span>
+                      <span className="h-2.5 w-2.5 rounded-full bg-amber-400"></span>
+                      <span className="h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold tracking-wide text-slate-200">OMNISCALE AI</p>
+                      <p className="font-mono text-[10px] text-slate-500">workspace / build-activity</p>
+                    </div>
                   </div>
-                  <span className="text-xs text-slate-500 font-mono">omniscale-build-log</span>
+                  <span className={
+                    'rounded-full border px-3 py-1 text-[10px] font-bold tracking-wider ' +
+                    (loading
+                      ? 'border-sky-700 bg-sky-950 text-sky-300'
+                      : error
+                        ? 'border-red-800 bg-red-950 text-red-300'
+                        : project
+                          ? 'border-emerald-800 bg-emerald-950 text-emerald-300'
+                          : 'border-slate-700 bg-slate-950 text-slate-400')
+                  }>
+                    {loading ? 'GENERATING' : error ? 'FAILED' : project ? 'COMPLETE' : terminalLines.length ? 'ACTIVITY' : 'READY'}
+                  </span>
                 </div>
-                <div className="p-4 min-h-48 max-h-[440px] overflow-auto space-y-1">
+                <div className="flex items-center justify-between gap-3 border-b border-slate-800 bg-black/40 px-4 py-2">
+                  <span className="font-mono text-[11px] text-slate-400">Build activity log</span>
+                  <span className="text-[10px] uppercase tracking-wider text-slate-600">AI workspace</span>
+                </div>
+                <div
+                  className="min-h-48 max-h-[440px] space-y-2 overflow-auto bg-black p-4"
+                  aria-live="polite"
+                  aria-relevant="additions text"
+                >
                   {terminalLines.map(line => (
-                    <TerminalLine key={line.id} tone={line.tone}>{line.message}</TerminalLine>
+                    <div key={line.id} className="flex gap-3">
+                      <span className="select-none font-mono text-[10px] text-slate-700">
+                        {String(line.id).padStart(2, '0')}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <TerminalLine tone={line.tone}>{line.message}</TerminalLine>
+                      </div>
+                    </div>
                   ))}
-                  {loading && <TerminalLine tone="info">Waiting for AI response...</TerminalLine>}
-                  {!terminalLines.length && <TerminalLine tone="muted">No build activity yet.</TerminalLine>}
+                  {loading && (
+                    <div className="flex gap-3">
+                      <span className="font-mono text-[10px] text-slate-700">··</span>
+                      <TerminalLine tone="info">Waiting for AI generation response...</TerminalLine>
+                    </div>
+                  )}
+                  {!terminalLines.length && (
+                    <TerminalLine tone="muted">Build activity will appear here when you generate a project.</TerminalLine>
+                  )}
+                </div>
+                <div className="border-t border-slate-800 bg-slate-900/80 px-4 py-3">
+                  <p className="text-[11px] leading-5 text-slate-500">
+                    Live build activity display only. This panel is not an operating-system shell and does not execute terminal commands.
+                  </p>
                 </div>
               </div>
             )}
