@@ -25,6 +25,27 @@ function createBlockedEmailsRouter({
 
   const router = express.Router();
 
+  // Expose a minimal server-verified admin capability check for the UI.
+  // Never trust a client-side role flag or email allowlist.
+  router.get('/status', requireAuth, (req, res) => {
+    const requesterEmail = String(req.user?.email || '')
+      .trim()
+      .toLowerCase();
+
+    if (!requesterEmail || !allowedEmails.has(requesterEmail)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Administrative permission required.'
+      });
+    }
+
+    return res.json({
+      success: true,
+      admin: true,
+      capabilities: ['blocked-emails']
+    });
+  });
+
   router.post('/blocked-emails', requireAuth, async (req, res) => {
     try {
       const requesterEmail = String(req.user?.email || '')

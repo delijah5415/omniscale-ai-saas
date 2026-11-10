@@ -1,0 +1,2 @@
+import CapabilityState from '@/components/workspace/CapabilityState';
+export default function Page(){return <CapabilityState title="Notebooks" description="Notebook persistence and collaboration are not implemented in the supplied backend yet. The page is ready as a navigation destination without inventing saved content." planned={['Create and edit notebooks','Autosave and version history','Attach workspace conversations','Share notebooks with controlled permissions']}/>;}

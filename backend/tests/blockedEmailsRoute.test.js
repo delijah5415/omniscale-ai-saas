@@ -217,3 +217,54 @@ test('reports partial account-ban failures', async () => {
   assert.equal(result.body.bannedAccounts, 0);
   assert.equal(result.body.failedAccountBans, 1);
 });
+
+test('admin status endpoint denies non-administrators without database access', async () => {
+  const supabase = createAdminSupabase();
+  const router = createRouter(supabase, 'ordinary@example.com');
+  const app = express();
+  app.use('/api/admin', router);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve, reject) => {
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+  try {
+    const address = server.address();
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/admin/status`, {
+      headers: { Connection: 'close' }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(body.success, false);
+    assert.equal(supabase.calls.length, 0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('admin status endpoint exposes only supported capabilities to allowlisted administrators', async () => {
+  const supabase = createAdminSupabase();
+  const router = createRouter(supabase, 'admin@example.com');
+  const app = express();
+  app.use('/api/admin', router);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve, reject) => {
+    server.once('listening', resolve);
+    server.once('error', reject);
+  });
+  try {
+    const address = server.address();
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/admin/status`, {
+      headers: { Connection: 'close' }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.admin, true);
+    assert.deepEqual(body.capabilities, ['blocked-emails']);
+    assert.equal(supabase.calls.length, 0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise(resolve => server.close(resolve));
+  }
+});

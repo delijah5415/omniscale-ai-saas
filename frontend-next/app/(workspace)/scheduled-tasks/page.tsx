@@ -1,0 +1,2 @@
+import CapabilityState from '@/components/workspace/CapabilityState';
+export default function Page(){return <CapabilityState title="Scheduled tasks" description="No task scheduler or background job service is present in the current source. Scheduling controls are therefore not enabled until a durable queue, worker, and ownership checks are added." planned={['Recurring and one-time schedules','Timezone-aware execution','Retry, pause, and cancellation policies','Execution logs and notifications']}/>;}

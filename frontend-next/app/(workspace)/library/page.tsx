@@ -1,0 +1,2 @@
+import CapabilityState from '@/components/workspace/CapabilityState';
+export default function Page(){return <CapabilityState title="Library" description="A central asset library is part of the new workspace navigation. The supplied backend currently has no library asset CRUD or storage API, so this page does not display fabricated files." planned={['Per-user asset metadata and storage','Search, tags, and filters','Version history and secure sharing','Import and export controls']}/>;}
