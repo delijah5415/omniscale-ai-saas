@@ -134,7 +134,6 @@ async function cancelActiveSubscription(profile, userId) {
 
 router.post('/sync-phone', requireAuth, async (req, res) => {
   try {
-    // Phone is read only from the authenticated Supabase user's metadata.
     const phone = req.user.user_metadata?.phone;
 
     if (typeof phone !== 'string' || !/^\+[1-9]\d{6,14}$/.test(phone)) {
@@ -144,51 +143,34 @@ router.post('/sync-phone', requireAuth, async (req, res) => {
       });
     }
 
-    const { data: existingProfile, error: lookupError } = await supabaseAdmin
-      .from('user_profiles')
-      .select('user_id')
-      .eq('user_id', req.user.id)
-      .maybeSingle();
+    const { data, error } = await supabaseAdmin
+      .from('user_phone_numbers')
+      .upsert({
+        user_id: req.user.id,
+        phone,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' })
+      .select('phone, phone_verified_at')
+      .single();
 
-    if (lookupError) {
-      console.error('Phone profile lookup failed:', lookupError.message);
+    if (error) {
+      console.error('Phone number sync failed:', error.message);
       return res.status(500).json({
         success: false,
-        error: 'Unable to update phone profile.'
+        error: 'Unable to update phone number.'
       });
     }
 
-    const profileQuery = existingProfile
-      ? supabaseAdmin
-          .from('user_profiles')
-          .update({ phone, updated_at: new Date().toISOString() })
-          .eq('user_id', req.user.id)
-      : supabaseAdmin
-          .from('user_profiles')
-          .insert({
-            user_id: req.user.id,
-            phone,
-            plan_type: 'free',
-            status: 'inactive',
-            updated_at: new Date().toISOString()
-          });
-
-    const { error: updateError } = await profileQuery;
-
-    if (updateError) {
-      console.error('Phone profile update failed:', updateError.message);
-      return res.status(500).json({
-        success: false,
-        error: 'Unable to update phone profile.'
-      });
-    }
-
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      phone: data.phone,
+      phoneVerifiedAt: data.phone_verified_at || null
+    });
   } catch (error) {
-    console.error('Phone profile sync failed:', error.message);
+    console.error('Phone number sync failed:', error.message);
     return res.status(500).json({
       success: false,
-      error: 'Unable to update phone profile.'
+      error: 'Unable to update phone number.'
     });
   }
 });
@@ -197,10 +179,23 @@ router.get('/me', requireAuth, async (req, res) => {
   try {
     const profile = await getUserProfile(req.user.id);
 
+    const { data: phoneRecord, error: phoneError } = await supabaseAdmin
+      .from('user_phone_numbers')
+      .select('phone, phone_verified_at')
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (phoneError) {
+      console.error('Account phone lookup failed:', phoneError.message);
+      throw new Error('Unable to load account phone information.');
+    }
+
     return res.json({
       success: true,
       account: {
         email: req.user.email || '',
+        phone: phoneRecord?.phone || null,
+        phoneVerifiedAt: phoneRecord?.phone_verified_at || null,
         fullName: (
           typeof req.user.user_metadata?.full_name === 'string'
             ? req.user.user_metadata.full_name
