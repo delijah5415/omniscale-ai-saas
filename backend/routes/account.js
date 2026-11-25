@@ -143,11 +143,33 @@ router.post('/sync-phone', requireAuth, async (req, res) => {
       });
     }
 
+    const { data: existingPhoneRecord, error: lookupError } = await supabaseAdmin
+      .from('user_phone_numbers')
+      .select('phone, phone_verified_at')
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.error('Phone number lookup failed:', lookupError.message);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to verify existing phone information.'
+      });
+    }
+
+    // Verification belongs to the exact phone number that was verified.
+    // Preserve it only when the incoming number has not changed.
+    const phoneVerifiedAt =
+      existingPhoneRecord?.phone === phone
+        ? existingPhoneRecord.phone_verified_at || null
+        : null;
+
     const { data, error } = await supabaseAdmin
       .from('user_phone_numbers')
       .upsert({
         user_id: req.user.id,
         phone,
+        phone_verified_at: phoneVerifiedAt,
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' })
       .select('phone, phone_verified_at')

@@ -6,9 +6,30 @@ import { API_URL } from '@/lib/config';
 type AuthState = { user: User | null; session: Session | null; loading: boolean; subscription: any; refreshSubscription: () => Promise<void>; signOut: () => Promise<void> };
 const Context = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user,setUser]=useState<User|null>(null); const [session,setSession]=useState<Session|null>(null); const [loading,setLoading]=useState(true); const [subscription,setSubscription]=useState<any>(null); const verifying=useRef(false);
+  const [user,setUser]=useState<User|null>(null); const [session,setSession]=useState<Session|null>(null); const [loading,setLoading]=useState(true); const [subscription,setSubscription]=useState<any>(null); const verifying=useRef(false); const phoneSyncComplete=useRef(new Set<string>()); const phoneSyncInFlight=useRef(new Map<string,Promise<void>>());
   const refreshSubscription=useCallback(async()=>{ if(!session?.access_token){setSubscription(null);return;} try { const r=await fetch(`${API_URL}/builder/subscription-status`,{headers:{Authorization:`Bearer ${session.access_token}`},cache:'no-store'}); const d=await r.json(); if(!r.ok||!d.success) throw new Error(d.error||'Unable to verify subscription'); setSubscription(d); } catch(e:any){setSubscription({status:'unknown',hasAccess:false,error:e.message});} },[session?.access_token]);
   useEffect(()=>{ let mounted=true; let subscriptionListener: {unsubscribe:()=>void}|undefined; try { const supabase=getSupabase(); supabase.auth.getSession().then(({data})=>{if(!mounted)return;setSession(data.session);setUser(data.session?.user??null);setLoading(false);}).catch(()=>mounted&&setLoading(false)); const {data}=supabase.auth.onAuthStateChange((_event,next)=>{if(!mounted)return;setSession(next);setUser(next?.user??null);setLoading(false);}); subscriptionListener=data.subscription; } catch { setLoading(false); } return ()=>{mounted=false;subscriptionListener?.unsubscribe();}; },[]);
+  // Sync Auth metadata to the private phone table for every authenticated flow,
+  // including restored sessions and OAuth callbacks. Never log the phone or token.
+  useEffect(()=>{
+    const phone=user?.user_metadata?.phone;
+    const accessToken=session?.access_token;
+    if(!user?.id||typeof phone!=='string'||!/^\+[1-9]\d{6,14}$/.test(phone)||!accessToken)return;
+    const key=`${user.id}:${phone}`;
+    if(phoneSyncComplete.current.has(key)||phoneSyncInFlight.current.has(key))return;
+    const request=fetch(`${API_URL}/account/sync-phone`,{
+      method:'POST',
+      headers:{Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'}
+    }).then(response=>{
+      if(!response.ok)throw new Error(`Phone sync request failed (${response.status}).`);
+      phoneSyncComplete.current.add(key);
+    }).catch(error=>{
+      console.error('Phone profile sync failed:',error.message);
+    }).finally(()=>{
+      phoneSyncInFlight.current.delete(key);
+    });
+    phoneSyncInFlight.current.set(key,request);
+  },[user?.id,user?.user_metadata?.phone,session?.access_token]);
   useEffect(()=>{void refreshSubscription();},[refreshSubscription]);
   useEffect(()=>{ const id=new URLSearchParams(window.location.search).get('subscription_id'); const token=session?.access_token; if(!id||!token||verifying.current)return; verifying.current=true; fetch(`${API_URL}/builder/verify-subscription`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({subscriptionId:id})}).then(async r=>{const d=await r.json();if(!r.ok||!d.success)throw new Error(d.error||'PayPal subscription verification failed');window.history.replaceState({},document.title,window.location.pathname);await refreshSubscription();}).catch(e=>{console.error('PayPal subscription verification:',e.message);}).finally(()=>{verifying.current=false;}); },[session?.access_token,refreshSubscription]);
   const signOut=useCallback(async()=>{await getSupabase().auth.signOut();setSession(null);setUser(null);setSubscription(null);},[]);

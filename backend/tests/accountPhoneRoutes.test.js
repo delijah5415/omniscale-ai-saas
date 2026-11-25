@@ -208,6 +208,107 @@ test('sync-phone upserts the authenticated user phone into user_phone_numbers', 
   );
 });
 
+test('sync-phone preserves verification when the phone number is unchanged', async () => {
+  const verifiedAt = '2026-11-19T10:30:00.000Z';
+
+  state.phoneLookupResult = {
+    data: {
+      phone: '+254712345678',
+      phone_verified_at: verifiedAt
+    },
+    error: null
+  };
+
+  state.upsertResult = {
+    data: {
+      phone: '+254712345678',
+      phone_verified_at: verifiedAt
+    },
+    error: null
+  };
+
+  const result = await sendRequest('POST', '/api/account/sync-phone');
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.phoneVerifiedAt, verifiedAt);
+
+  const upsert = state.calls.find(call => call[0] === 'upsert');
+  assert.ok(upsert);
+  assert.equal(upsert[1].phone_verified_at, verifiedAt);
+});
+
+test('sync-phone clears verification when the phone number changes', async () => {
+  const oldVerifiedAt = '2026-11-19T10:30:00.000Z';
+
+  state.phoneLookupResult = {
+    data: {
+      phone: '+254700000001',
+      phone_verified_at: oldVerifiedAt
+    },
+    error: null
+  };
+
+  state.upsertResult = {
+    data: {
+      phone: '+254712345678',
+      phone_verified_at: null
+    },
+    error: null
+  };
+
+  const result = await sendRequest('POST', '/api/account/sync-phone');
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.phone, '+254712345678');
+  assert.equal(result.body.phoneVerifiedAt, null);
+
+  const upsert = state.calls.find(call => call[0] === 'upsert');
+  assert.ok(upsert);
+  assert.equal(upsert[1].phone, '+254712345678');
+  assert.equal(upsert[1].phone_verified_at, null);
+});
+
+test('sync-phone inserts a new phone with no verification timestamp', async () => {
+  state.phoneLookupResult = {
+    data: null,
+    error: null
+  };
+
+  state.upsertResult = {
+    data: {
+      phone: '+254712345678',
+      phone_verified_at: null
+    },
+    error: null
+  };
+
+  const result = await sendRequest('POST', '/api/account/sync-phone');
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.phoneVerifiedAt, null);
+
+  const upsert = state.calls.find(call => call[0] === 'upsert');
+  assert.ok(upsert);
+  assert.equal(upsert[1].phone_verified_at, null);
+});
+
+test('sync-phone fails closed when the existing phone lookup fails', async () => {
+  state.phoneLookupResult = {
+    data: null,
+    error: { message: 'Phone lookup failed' }
+  };
+
+  const result = await sendRequest('POST', '/api/account/sync-phone');
+
+  assert.equal(result.status, 500);
+  assert.equal(result.body.success, false);
+
+  assert.equal(
+    state.calls.some(call => call[0] === 'upsert'),
+    false
+  );
+});
+
 test('sync-phone rejects invalid metadata without writing to the database', async () => {
   state.userMetadata = { phone: 'not-a-phone-number' };
 
